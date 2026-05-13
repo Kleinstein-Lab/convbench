@@ -29,6 +29,9 @@ workflow CONVBENCH {
 
     def ch_versions = channel.empty()
     def ch_multiqc_files = channel.empty()
+
+    ch_samplesheet.dump(tag: "samplesheet")
+
     //
     // MODULE: Run FastQC
     //
