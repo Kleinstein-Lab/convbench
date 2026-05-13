@@ -38,7 +38,7 @@ params.fasta = getGenomeAttribute('fasta')
 //
 // WORKFLOW: Run main analysis pipeline depending on type of input
 //
-workflow KLEINSTEINLAB_CONVBENCH {
+workflow WF_CONVBENCH {
 
     take:
     samplesheet // channel: samplesheet read in from --input
@@ -85,7 +85,7 @@ workflow {
     //
     // WORKFLOW: Run main workflow
     //
-    KLEINSTEINLAB_CONVBENCH (
+    WF_CONVBENCH (
         PIPELINE_INITIALISATION.out.samplesheet
     )
     //
@@ -97,7 +97,7 @@ workflow {
         params.plaintext_email,
         params.outdir,
         params.monochrome_logs,
-        KLEINSTEINLAB_CONVBENCH.out.multiqc_report
+        WF_CONVBENCH.out.multiqc_report
     )
 }
 
