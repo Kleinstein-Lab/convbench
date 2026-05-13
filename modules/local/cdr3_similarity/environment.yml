@@ -1,0 +1,42 @@
+name: cdr3_similarity
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  - r-base=4.5.2
+  # Bioconductor dependencies
+  - bioconda::bioconductor-rhtslib
+  - bioconda::bioconductor-rsamtools
+  - bioconda::bioconductor-biostrings
+  - bioconda::bioconductor-genomicalignments
+  - bioconda::bioconductor-iranges
+  - bioconda::bioconductor-s4vectors
+  - bioconda::bioconductor-xvector
+  - bioconda::bioconductor-genomicranges
+  # System/build libraries needed by Rhtslib/Rsamtools
+  - conda-forge::zlib
+  - conda-forge::bzip2
+  - conda-forge::xz
+  - conda-forge::liblzma-devel
+  - conda-forge::libcurl
+  - conda-forge::openssl
+  - conda-forge::make
+  - conda-forge::compilers
+  # R packages needed by scripts in cdr3_similarity module
+  - conda-forge::r-pak
+  - conda-forge::r-ggplot2
+  - conda-forge::r-dplyr
+  - conda-forge::r-stringr
+  - conda-forge::r-readr
+  - conda-forge::r-ggplot2
+  - conda-forge::r-forcats
+  - conda-forge::r-rcolorbrewer
+  - conda-forge::r-airr
+  - conda-forge::r-patchwork
+  - conda-forge::r-data.table
+  - conda-forge::r-ggrepel
+  - conda-forge::r-pracma
+  - conda-forge::r-pbapply
+  - conda-forge::r-argparse

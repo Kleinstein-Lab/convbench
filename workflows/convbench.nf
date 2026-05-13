@@ -3,7 +3,7 @@
     IMPORT MODULES / SUBWORKFLOWS / FUNCTIONS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
-include { FASTQC                 } from '../modules/nf-core/fastqc/main'
+include { CDR3_SIMILARITY        } from '../modules/local/cdr3_similarity/main'
 include { MULTIQC                } from '../modules/nf-core/multiqc/main'
 include { paramsSummaryMap       } from 'plugin/nf-schema'
 include { paramsSummaryMultiqc   } from '../subworkflows/nf-core/utils_nfcore_pipeline'
@@ -33,10 +33,11 @@ workflow CONVBENCH {
     ch_samplesheet.dump(tag: "samplesheet")
 
     //
-    // MODULE: Run FastQC
+    // MODULE: Run CDR3_similarity
     //
-    FASTQC(ch_samplesheet)
-    ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.map{ _meta, file -> file })
+    CDR3_SIMILARITY(
+        ch_samplesheet
+    )
 
     //
     // Collate and save software versions
