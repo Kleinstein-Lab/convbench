@@ -507,15 +507,6 @@ convergent_clones$clone_id_full <- paste(convergent_clones$convergent_clone_id, 
 #########################
 # Fisher's exact test
 
-# make place to save the data
-if(!dir.exists(file.path(OUTPUT_DIR, 'tables', 'fisher_results'))){
-  dir.create(file.path(OUTPUT_DIR, 'tables', 'fisher_results'))
-}
-
-if(!dir.exists(file.path(OUTPUT_DIR, 'figures', 'fisher_results'))){
-  dir.create(file.path(OUTPUT_DIR, 'figures', 'fisher_results'))
-}
-
 fisher_table <- get_combined_fisher_exact_table(hier_clone_df = convergent_clones,
                                                 condition_set = c(DISEASE_GP),
                                                 condition_col = DA_VAR,
@@ -525,7 +516,7 @@ fisher_table <- get_combined_fisher_exact_table(hier_clone_df = convergent_clone
   
 
   
-write.table(fisher_table, file.path(OUTPUT_DIR, 'tables', 'fisher_results', 'fisher_table.tsv'), 
+write.table(fisher_table, file.path(OUTPUT_DIR, 'tables', 'fisher_table.tsv'), 
             sep="\t", quote = F, row.names = F)
 
 fisher_table %>%
@@ -543,7 +534,7 @@ summary <- summarize_clusters(fisher_table,
                               convergent_clones, 
                              'convergent_clone_id', 'subject_id', 0.1)
   
-write.table(summary, file.path(OUTPUT_DIR, 'tables', 'fisher_results', 'fisher_summary.tsv'), 
+write.table(summary, file.path(OUTPUT_DIR, 'tables', 'fisher_summary.tsv'), 
             sep="\t", quote = F, row.names = F)
   
 # make plots
@@ -552,26 +543,26 @@ if (SIMULATED){
   make_significant_cluster_plot(fisher_table, convergent_clones, 
                                 'id_col', 0.1, 'convergent_clone_id', 'simulated')
   
-  ggsave(file.path(OUTPUT_DIR, 'figures', 'fisher_results', 'simulated_results_by_seq_id.png'), 
+  ggsave(file.path(OUTPUT_DIR, 'figures', 'simulated_results_by_seq_id.png'), 
          device="png", width=5, height=4, units="in")
 }
 
 make_significant_cluster_plot(fisher_table, convergent_clones, 
                               'subject_id', 0.1, 'convergent_clone_id', DA_VAR)
 
-ggsave(file.path(OUTPUT_DIR, 'figures', 'fisher_results', paste0(DA_VAR, '_results_by_subj_id.png')), 
+ggsave(file.path(OUTPUT_DIR, 'figures', paste0(DA_VAR, '_results_by_subj_id.png')), 
        device="png", width=5, height=4, units="in")
 
 make_significant_cluster_plot(fisher_table, convergent_clones, 
                               'id_col', 0.1, 'convergent_clone_id', DA_VAR)
 
-ggsave(file.path(OUTPUT_DIR, 'figures', 'fisher_results', paste0(DA_VAR, '_results_by_seq_id.png')), 
+ggsave(file.path(OUTPUT_DIR, 'figures', paste0(DA_VAR, '_results_by_seq_id.png')), 
        device="png", width=5, height=4, units="in")
 
 make_fisher_overview_plot(fisher_table, convergent_clones, 
                           'subject', DISEASE_GP, 0.1, 'convergent_clone_id', max_x = 6)
 
-ggsave(file.path(OUTPUT_DIR, 'figures', 'fisher_results', 'fisher_overview_disease.png'), 
+ggsave(file.path(OUTPUT_DIR, 'figures', 'fisher_overview_disease.png'), 
        device="png", width=8, height=8, units="in")
 
 

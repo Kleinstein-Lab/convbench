@@ -1,7 +1,8 @@
 process CDR3_SIMILARITY{
-    tag "process_low"
+    tag "${meta.id}"
+    label 'process_medium'
 
-    container "docker.io/ggabernet/cdr3similiarity:1.0.0dev"
+    container "docker.io/ggabernet/cdr3similarity:1.0.0dev"
 
     input:
     tuple val(meta), path(airr), path(embedding)
@@ -27,7 +28,7 @@ process CDR3_SIMILARITY{
     -v TRUE \
     -sc FALSE \
     -r FALSE \
-    -si FALSE
+    -si TRUE
 
     """
 }
