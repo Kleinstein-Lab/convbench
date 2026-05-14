@@ -4,6 +4,7 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 include { CDR3_SIMILARITY        } from '../modules/local/cdr3_similarity/main'
+include { MILO                   } from '../modules/local/milo/main'
 include { MULTIQC                } from '../modules/nf-core/multiqc/main'
 include { paramsSummaryMap       } from 'plugin/nf-schema'
 include { paramsSummaryMultiqc   } from '../subworkflows/nf-core/utils_nfcore_pipeline'
@@ -36,6 +37,13 @@ workflow CONVBENCH {
     // MODULE: Run CDR3_similarity
     //
     CDR3_SIMILARITY(
+        ch_samplesheet
+    )
+
+    //
+    // MODULE: Run Milo
+    //
+    MILO(
         ch_samplesheet
     )
 

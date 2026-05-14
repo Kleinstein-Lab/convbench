@@ -1,0 +1,45 @@
+name: milo
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  - r-base=4.5.2
+  # Bioconductor dependencies
+  - bioconda::bioconductor-rhtslib
+  - bioconda::bioconductor-rsamtools
+  - bioconda::bioconductor-biostrings
+  - bioconda::bioconductor-genomicalignments
+  - bioconda::bioconductor-s4vectors
+  - bioconda::bioconductor-xvector
+  - bioconda::bioconductor-matrixgenerics
+  # System/build libraries needed by Rhtslib/Rsamtools
+  - conda-forge::zlib
+  - conda-forge::make
+  # R packages needed by scripts in milo module
+  - conda-forge::r-pak
+  - bioconda::bioconductor-milor
+  - bioconda::bioconductor-singlecellexperiment
+  - bioconda::bioconductor-summarizedexperiment
+  - bioconda::bioconductor-scater
+  - bioconda::bioconductor-scran
+  - bioconda::bioconductor-biocneighbors
+  - bioconda::bioconductor-sparsearray
+  - bioconda::bioconductor-sparsematrixstats
+  - conda-forge::r-ggplot2
+  - conda-forge::r-dplyr
+  - conda-forge::r-stringr
+  - conda-forge::r-readr
+  - conda-forge::r-ggplot2
+  - conda-forge::r-patchwork
+  - conda-forge::r-cowplot
+  - conda-forge::r-rcolorbrewer
+  - conda-forge::r-data.table
+  - conda-forge::r-matrix
+  - conda-forge::r-matrixstats
+  - conda-forge::r-pracma
+  - conda-forge::r-igraph
+  - conda-forge::r-stringi
+  - conda-forge::r-argparse
+  - conda-forge::r-r.utils

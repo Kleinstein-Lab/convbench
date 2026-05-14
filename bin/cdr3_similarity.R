@@ -348,7 +348,6 @@ if (REMOVE_DUPS){
 }
 
 # create locations for figures and results to be saved within output dir
-
 if(!dir.exists(file.path(OUTPUT_DIR))){
   dir.create(file.path(OUTPUT_DIR))
 }
