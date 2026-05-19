@@ -5,6 +5,7 @@
 */
 include { CDR3_SIMILARITY        } from '../modules/local/cdr3_similarity/main'
 include { MILO                   } from '../modules/local/milo/main'
+include { DASEQ                  } from '../modules/local/daseq/main'
 include { MULTIQC                } from '../modules/nf-core/multiqc/main'
 include { paramsSummaryMap       } from 'plugin/nf-schema'
 include { paramsSummaryMultiqc   } from '../subworkflows/nf-core/utils_nfcore_pipeline'
@@ -44,6 +45,13 @@ workflow CONVBENCH {
     // MODULE: Run Milo
     //
     MILO(
+        ch_samplesheet
+    )
+
+    //
+    // MODULE: Run DA-seq
+    //
+    DASEQ(
         ch_samplesheet
     )
 

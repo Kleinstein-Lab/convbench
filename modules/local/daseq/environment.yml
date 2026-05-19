@@ -1,0 +1,25 @@
+name: daseq
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  - r-base=4.4.1
+  # R packages needed by scripts in cdr3_similarity module
+  - conda-forge::r-pak
+  - conda-forge::r-r.utils
+  - conda-forge::r-ggplot2
+  - conda-forge::r-dplyr
+  - conda-forge::r-stringr
+  - conda-forge::r-readr
+  - conda-forge::r-ggplot2
+  - conda-forge::r-rcolorbrewer
+  - conda-forge::r-scales
+  - conda-forge::r-cowplot
+  - conda-forge::r-patchwork
+  - conda-forge::r-pracma
+  - conda-forge::r-uwot
+  - conda-forge::r-ggrastr
+  - conda-forge::r-seurat=4.4.0
+  - conda-forge::r-argparse

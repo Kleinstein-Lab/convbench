@@ -14,7 +14,7 @@ process MILO{
     path "tables/seq_results.tsv", emit: seq_results
     path "tables/da_results.tsv", emit: da_results
     path "tables/nhood_stats.tsv", emit: nhood_stats
-    path "tables/milo_nhoods.RDS", emit: milo_nhoods
+    path "tables/milo_nhoods.RDS", emit: milo_nhoods, optional: true
     path "figures/*.png", emit: figs
 
     script:
