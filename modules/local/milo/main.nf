@@ -2,7 +2,7 @@ process MILO{
     tag "${meta.id}"
     label 'process_medium'
 
-    container "docker.io/immcantation/milo:1.0.0dev"
+    container "docker.io/cfsullivan16/milo:1.0.0dev"
 
     input:
     tuple val(meta), path(airr), path(embedding)
