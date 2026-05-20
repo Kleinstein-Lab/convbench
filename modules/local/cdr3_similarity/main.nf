@@ -2,7 +2,7 @@ process CDR3_SIMILARITY{
     tag "${meta.id}"
     label 'process_medium'
 
-    container "docker.io/ggabernet/cdr3similarity:1.0.0dev"
+    container "docker.io/cfsullivan16/cdr3similarity:1.0.0dev"
 
     input:
     tuple val(meta), path(airr), path(embedding)
