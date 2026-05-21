@@ -26,9 +26,9 @@ process DASEQ{
     -md $airr \
     -o . \
     -da "status" \
-    -m 10 \
-    -t 25 \
-    -x 250 \
+    -m 20 \
+    -t 50 \
+    -x 450 \
     -v TRUE \
     -sc FALSE \
     -si TRUE \
