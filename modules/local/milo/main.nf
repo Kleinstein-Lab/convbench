@@ -24,7 +24,7 @@ process MILO{
     -md $airr \
     -o . \
     -da "status" \
-    -k 10 \
+    -k 20 \
     -pr 0.1 \
     -v TRUE \
     -sc FALSE \
