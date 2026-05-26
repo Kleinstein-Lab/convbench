@@ -1,0 +1,31 @@
+name: bcrdist
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+  
+dependencies:
+  - r-base=4.4.1
+  - conda-forge::python=3.12.5
+  # python packages
+  - conda-forge::pandas
+  - conda-forge::numpy
+  - conda-forge::scipy
+  # System/build libraries needed by Rhtslib/Rsamtools
+  - conda-forge::zlib
+  # R packages
+  - conda-forge::r-pak
+  - conda-forge::r-dplyr
+  - conda-forge::r-ggplot2
+  - conda-forge::r-rcolorbrewer
+  - conda-forge::r-ggrepel
+  - conda-forge::r-argparse
+  - conda-forge::r-reticulate
+  - conda-forge::r-airr
+  - conda-forge::r-scales
+  # Bioconductor R packages
+  - bioconda::bioconductor-biostrings
+  # pip python packages
+  - pip:
+    - tcrdist3
+    - pwseqdist
