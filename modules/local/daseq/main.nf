@@ -1,6 +1,6 @@
 process DASEQ{
     tag "${meta.id}"
-    label 'process_medium'
+    label 'process_high'
 
     container "docker.io/cfsullivan16/daseq:1.0.0dev"
 
