@@ -42,6 +42,9 @@ parser$add_argument('-k', '--k_val', type = 'integer', default = 50,
 parser$add_argument('-pr', '--prop', type = 'double', default = 0.1,
                     help = 'Proportion of vertices to randomly sample.')
 
+parser$add_argument('-a', '--auc_variable', type = 'character', default = FALSE,
+                    help = 'Specify which column should be used for generating AUC curve (i.e. "simulated" or "binder"). Column type should be logical. If no AUC variable, set to FALSE.')
+
 parser$add_argument('-v', '--vdj_info', type = 'logical', default = FALSE,
                     help = 'Is v call and j call information included in the metadata? Can apply to expression or embedding data.')
 
@@ -49,9 +52,6 @@ parser$add_argument('-v', '--vdj_info', type = 'logical', default = FALSE,
 # right now defaults to v_call and j_call columns and removes allele info
 parser$add_argument('-sc', '--single_cell', type = 'logical', default = FALSE,
                     help = 'Input true if V(D)J info is present and contains paired heavy and light chain info.')
-
-parser$add_argument('-si', '--simulated', type = 'logical', default = FALSE,
-                    help = 'Specify whether input data is simulated or real.')
 
 parser$add_argument('-r', '--remove_dups', type = 'logical', default = FALSE,
                     help = 'Will remove duplicate embeddings within an individual if TRUE.')
@@ -87,7 +87,7 @@ message(paste0('K nearest neighbor value: ', K_VAL))
 
 VDJ <- args$vdj_info
 SINGLE_CELL <- args$single_cell
-SIMULATED <- args$simulated
+AUC_VAR <- args$auc_variable
 OVERWRITE <- args$overwrite
 REMOVE_DUPS <- args$remove_dups
 
@@ -103,7 +103,7 @@ if (SINGLE_CELL){
   message('Bulk V(D)J info only available.')
 }
 
-if (SIMULATED){
+if (AUC_VAR != FALSE){
   message('Simulated data present.')
 } else{
   message('Simulated data not present.')
@@ -241,8 +241,8 @@ if (!'v_gene' %in% colnames(md)){
 
 reduced_md_cols <- c(DA_VAR, 'subject_id', 'sample_id', 'id_col')
 
-if (SIMULATED){
-  reduced_md_cols <- c(reduced_md_cols, 'simulated')
+if (AUC_VAR != FALSE){
+  reduced_md_cols <- c(reduced_md_cols, AUC_VAR)
 }
 
 md_reduced <- md %>%
@@ -563,7 +563,7 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'seq_results.tsv')) | OVERWRITE
 
 # updated to deal with cells that have no nhood
 
-if (SIMULATED){
+if (AUC_VAR != FALSE){
   invalid_cells <- sum(is.na(min_p_nhoods_df$min_nhood_FDR))
   total_cells <- nrow(min_p_nhoods_df)
   valid_cells <- total_cells - invalid_cells
@@ -571,7 +571,7 @@ if (SIMULATED){
   # change the sequences with no nhood to a min p of 1
   min_p_nhoods_df[is.na(min_p_nhoods_df$min_nhood_FDR), 'min_nhood_FDR'] <- 1
   
-  # add simulated info
+  # add AUC var info
   min_p_nhoods_df <- min_p_nhoods_df %>%
     dplyr::inner_join(md_reduced, by = 'id_col')
   
@@ -590,10 +590,10 @@ if (SIMULATED){
     # get cells with min nhood p below threshold
     da.cell.list <- min_p_nhoods_df$min_nhood_FDR < thresh
     
-    true_pos <- sum(da.cell.list == T & min_p_nhoods_df$simulated == T)
-    false_neg <- sum(da.cell.list == F & min_p_nhoods_df$simulated == T)
-    true_neg <- sum(da.cell.list == F & min_p_nhoods_df$simulated == F)
-    false_pos <- sum(da.cell.list == T & min_p_nhoods_df$simulated == F)
+    true_pos <- sum(da.cell.list == T & min_p_nhoods_df[[AUC_VAR]] == T)
+    false_neg <- sum(da.cell.list == F & min_p_nhoods_df[[AUC_VAR]] == T)
+    true_neg <- sum(da.cell.list == F & min_p_nhoods_df[[AUC_VAR]] == F)
+    false_pos <- sum(da.cell.list == T & min_p_nhoods_df[[AUC_VAR]] == F)
     
     TPR <- true_pos / (true_pos + false_neg)
     FPR <- 1 - (true_neg / (true_neg + false_pos))
@@ -637,16 +637,16 @@ if (SIMULATED){
                   p_under_0.1 = min_nhood_FDR <= 0.1) 
   
   # calc jaccard index
-  jaccard_005 <- sum(jaccard_df$simulated & jaccard_df$p_under_0.005, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_under_0.005, na.rm = T)
-  jaccard_05 <- sum(jaccard_df$simulated & jaccard_df$p_under_0.05, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_under_0.05, na.rm = T)
-  jaccard_1 <- sum(jaccard_df$simulated & jaccard_df$p_under_0.1, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_under_0.1, na.rm = T)
+  jaccard_005 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.005, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.005, na.rm = T)
+  jaccard_05 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.05, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.05, na.rm = T)
+  jaccard_1 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.1, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.1, na.rm = T)
   
   jaccard_thresholds <- sort(unique(jaccard_df$min_nhood_FDR))
   jaccard_thresholds <- jaccard_thresholds[!is.na(jaccard_thresholds)]
   
   # get Jaccard across a range
   jaccards <- sapply(jaccard_thresholds, function(thresh){
-    j <- sum(jaccard_df$simulated & jaccard_df$min_nhood_FDR <= thresh, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$min_nhood_FDR <= thresh, na.rm = T)
+    j <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$min_nhood_FDR <= thresh, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$min_nhood_FDR <= thresh, na.rm = T)
   })
   
   # get max Jaccard and its corresponding p-value
@@ -762,30 +762,30 @@ if (!all(sort(unique(md$subject_id)) == sort(unique(md$sample_id)))){
 }
 
 # also get percent sim
-if (SIMULATED){
+if (AUC_VAR != FALSE){
   
-  sim_cells <- md %>%
-    dplyr::filter(simulated == TRUE) %>%
+  hit_cells <- md %>%
+    dplyr::filter(`AUC_VAR` == TRUE) %>%
     pull(id_col)
   
-  sim_pct <- lapply(nhood_sizes$nhood_id, function(nhood){
+  hit_pct <- lapply(nhood_sizes$nhood_id, function(nhood){
     
-    total_sim <- sum(milo@nhoods[sim_cells, nhood])
+    total_hits <- sum(milo@nhoods[hit_cells, nhood])
     
     return(data.frame('nhood_id' = nhood,
-                      'sim_seqs' = total_sim))
+                      'hit_seqs' = total_hits))
     
   })
   
-  sim_pct <- do.call(rbind, sim_pct)
+  hit_pct <- do.call(rbind, hit_pct)
   
   subj_nhood_cts <- subj_nhood_cts %>%
-    dplyr::left_join(sim_pct,
+    dplyr::left_join(hit_pct,
                      by = 'nhood_id')
   
-  # get percent of nhood that is simulated seqs
+  # get percent of nhood that is hits seqs
   subj_nhood_cts <- subj_nhood_cts %>%
-    dplyr::mutate(pct_sim = sim_seqs / cells_per_nhood)
+    dplyr::mutate(pct_hits = hit_seqs / cells_per_nhood)
   
 }
 
@@ -835,9 +835,9 @@ stat_table <- data.frame('tool' = c('Milo'),
                          'depths' = paste(table(milo@colData$subject_id), collapse = ', '),
                          check.names = F)
 
-if (SIMULATED == T){
+if (AUC_VAR != FALSE){
   
-  stat_table$pct_simulated <- c(mean(milo@colData$simulated, na.rm = T) * 100)
+  stat_table$pct_hits <- c(mean(milo@colData[[AUC_VAR]], na.rm = T) * 100)
   stat_table$Jaccard_0.005 = jaccard_005
   stat_table$Jaccard_0.05 = jaccard_05
   stat_table$Jaccard_0.1 = jaccard_1
@@ -845,7 +845,7 @@ if (SIMULATED == T){
   stat_table$Jaccard_max_p = Jaccard_max_p
   stat_table$AUC <- c(auroc)
   
-  stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'pct_simulated',
+  stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'pct_hits',
                              'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
                              'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                              'time (min)', 'subjects', 'depths')]
@@ -1010,11 +1010,11 @@ if (VDJ){
 }
 
 # include info if simulated
-if (SIMULATED){
+if (AUC_VAR != FALSE){
   
-  message('Visualize simulated sequences.')
+  message('Visualize hit sequences.')
   
-  make_UMAP_viz('simulated', 'Simulated', custom_pal = c('TRUE' = "red", 'FALSE' = "gray"))
+  make_UMAP_viz(AUC_VAR, 'Hits', custom_pal = c('TRUE' = "red", 'FALSE' = "gray"))
   
 }
 

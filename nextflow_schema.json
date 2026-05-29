@@ -5,6 +5,49 @@
     "description": "A pipeline for benchmarking BCR convergence.",
     "type": "object",
     "$defs": {
+        "universal_options": {
+            "title": "Universal options",
+            "type": "object",
+            "description": "",
+            "default": "",
+            "fa_icon": "fas fa-globe",
+            "properties": {
+                "conv_tools": {
+                    "type": "string",
+                    "description": "Comma-separated list of convergence tools to run of cdr3_similarity, milo, daseq, bcrdist"
+                },
+                "da_variable": {
+                    "type": "string",
+                    "default": "status",
+                    "description": "Variable to use for differential abundance testing. There should be two levels in this factor/categorical variable."
+                },
+                "auc_variable": {
+                    "type": "string",
+                    "default": "simulated",
+                    "description": "Specify which column should be used for generating AUC curve (i.e. \"simulated\" or \"binder\"). Column type should be logical. If no AUC variable, set to FALSE."
+                },
+                "vdj_info": {
+                    "type": "string",
+                    "default": "TRUE",
+                    "description": "Are V(D)J annotations present in the metadata?"
+                },
+                "single_cell": {
+                    "type": "string",
+                    "default": "FALSE",
+                    "description": "Run in single-cell mode? Input TRUE if V(D)J info is present and contains paired heavy and light chain info."
+                },
+                "remove_dups": {
+                    "type": "string",
+                    "default": "FALSE",
+                    "description": "Will remove duplicate embeddings within an individual if TRUE."
+                },
+                "overwrite": {
+                    "type": "string",
+                    "default": "FALSE",
+                    "description": "Will overwrite any existing output files if TRUE."
+                }
+            }
+        },
         "input_output_options": {
             "title": "Input/output options",
             "type": "object",
@@ -233,6 +276,9 @@
         }
     },
     "allOf": [
+        {
+            "$ref": "#/$defs/universal_options"
+        },
         {
             "$ref": "#/$defs/input_output_options"
         },

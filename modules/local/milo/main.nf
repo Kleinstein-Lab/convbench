@@ -23,14 +23,14 @@ process MILO{
     -d $embedding \
     -md $airr \
     -o . \
-    -da "status" \
+    -da ${params.da_variable} \
     -k 20 \
     -pr 0.1 \
-    -v TRUE \
-    -sc FALSE \
-    -si TRUE \
-    -r FALSE \
-    -w TRUE
+    -a ${params.auc_variable} \
+    -v ${params.vdj_info} \
+    -sc ${params.single_cell} \
+    -r ${params.remove_dups} \
+    -w ${params.overwrite}
 
     """
 }

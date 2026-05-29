@@ -25,15 +25,15 @@ process DASEQ{
     -d $embedding \
     -md $airr \
     -o . \
-    -da "status" \
+    -da ${params.da_variable} \
     -m 20 \
     -t 50 \
     -x 450 \
-    -v TRUE \
-    -sc FALSE \
-    -si TRUE \
-    -r FALSE \
-    -w TRUE
+    -a ${params.auc_variable} \
+    -v ${params.vdj_info} \
+    -sc ${params.single_cell} \
+    -r ${params.remove_dups} \
+    -w ${params.overwrite}
 
     """
 }

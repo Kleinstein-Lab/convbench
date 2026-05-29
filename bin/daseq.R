@@ -71,6 +71,9 @@ parser$add_argument('-t', '--k_step', type = 'integer', default = 50,
 parser$add_argument('-x', '--k_max', type = 'integer', default = 300,
                     help = 'Maximum number of neighbors to use in KNN algorithm.')
 
+parser$add_argument('-a', '--auc_variable', type = 'character', default = FALSE,
+                    help = 'Specify which column should be used for generating AUC curve (i.e. "simulated" or "binder"). Column type should be logical. If no AUC variable, set to FALSE.')
+
 parser$add_argument('-v', '--vdj_info', type = 'logical', default = TRUE,
                     help = 'Is v call and j call information included in the metadata? Can apply to expression or embedding data.')
 
@@ -78,9 +81,6 @@ parser$add_argument('-v', '--vdj_info', type = 'logical', default = TRUE,
 # right now defaults to v_call and j_call columns and removes allele info
 parser$add_argument('-sc', '--single_cell', type = 'logical', default = FALSE,
                     help = 'Input true if V(D)J info is present and contains paired heavy and light chain info.')
-
-parser$add_argument('-si', '--simulated', type = 'logical', default = FALSE,
-                    help = 'Specify whether input data is simulated or real.')
 
 parser$add_argument('-r', '--remove_dups', type = 'logical', default = FALSE,
                     help = 'Will remove duplicate embeddings within an individual if TRUE.')
@@ -110,7 +110,7 @@ message(paste0('K nearest neighbor values: ', paste0(KVEC, collapse = ' ')))
 
 VDJ <- args$vdj_info
 SINGLE_CELL <- args$single_cell
-SIMULATED <- args$simulated
+AUC_VAR <- args$auc_variable
 
 OVERWRITE <- args$overwrite
 REMOVE_DUPS <- args$remove_dups
@@ -129,7 +129,7 @@ if (SINGLE_CELL){
   message('Bulk V(D)J info only available.')
 }
 
-if (SIMULATED){
+if (AUC_VAR != FALSE){
   message('Simulated data present.')
 } else{
   message('Simulated data not present.')
@@ -474,11 +474,11 @@ if (VDJ){
 }
 
 # include info if simulated
-if (SIMULATED){
+if (AUC_VAR != FALSE){
   umap_embeddings_coords <- umap_embeddings_coords %>%
-    dplyr::left_join(md[c('id_col', 'simulated')], by = 'id_col')
+    dplyr::left_join(md[c('id_col', AUC_VAR)], by = 'id_col')
   
-  make_umap_viz('simulated', 'Simulated', custom_pal = c('TRUE' = "red", 'FALSE' = "gray"))
+  make_umap_viz(AUC_VAR, 'Hits', custom_pal = c('TRUE' = "red", 'FALSE' = "gray"))
 }
 
 make_umap_viz('condition', DA_VAR)
@@ -599,9 +599,9 @@ if (VDJ){
   }
 }
 
-if (SIMULATED){
+if (AUC_VAR != FALSE){
   X.cells <- X.cells %>%
-    dplyr::left_join(md[c('simulated', 'id_col')], by = 'id_col')
+    dplyr::left_join(md[c(AUC_VAR, 'id_col')], by = 'id_col')
 }
 
 # add da var info
@@ -664,7 +664,7 @@ names(X.cells)[names(X.cells) == ID_COL_NAME] <- 'id_col'
 # AUC #
 #######
 
-if (SIMULATED & 'simulated' %in% colnames(X.cells)){ 
+if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){ 
   
   # make the AUC plot
   
@@ -689,10 +689,10 @@ if (SIMULATED & 'simulated' %in% colnames(X.cells)){
     non_DA_cells <- X.cells %>%
       dplyr::filter(abs(pred) < thresh)
     
-    true_pos <- sum(DA_cells$simulated == TRUE)
-    false_neg <- sum(non_DA_cells$simulated == TRUE)
-    true_neg <- sum(non_DA_cells$simulated == FALSE)
-    false_pos <- sum(DA_cells$simulated == FALSE)
+    true_pos <- sum(DA_cells[[AUC_VAR]] == TRUE)
+    false_neg <- sum(non_DA_cells[[AUC_VAR]] == TRUE)
+    true_neg <- sum(non_DA_cells[[AUC_VAR]] == FALSE)
+    false_pos <- sum(DA_cells[[AUC_VAR]] == FALSE)
     
     return(data.frame('TPR' = true_pos / (true_pos + false_neg),
                       'FPR' = 1 - (true_neg / (true_neg + false_pos))))
@@ -749,10 +749,10 @@ if (SIMULATED & 'simulated' %in% colnames(X.cells)){
     non_DA_cells <- X.cells %>%
       dplyr::filter(ttest.adj.BH >= thresh)
     
-    true_pos <- sum(DA_cells$simulated == TRUE)
-    false_neg <- sum(non_DA_cells$simulated == TRUE)
-    true_neg <- sum(non_DA_cells$simulated == FALSE)
-    false_pos <- sum(DA_cells$simulated == FALSE)
+    true_pos <- sum(DA_cells[[AUC_VAR]] == TRUE)
+    false_neg <- sum(non_DA_cells[[AUC_VAR]] == TRUE)
+    true_neg <- sum(non_DA_cells[[AUC_VAR]] == FALSE)
+    false_pos <- sum(DA_cells[[AUC_VAR]] == FALSE)
     
     return(data.frame('TPR' = true_pos / (true_pos + false_neg),
                       'FPR' = 1 - (true_neg / (true_neg + false_pos))))
@@ -797,9 +797,9 @@ if (SIMULATED & 'simulated' %in% colnames(X.cells)){
                   p_under_0.1 = ttest.adj.BH <= 0.1)
   
   # calc jaccard index
-  jaccard_005 <- sum(jaccard_df$simulated & jaccard_df$p_under_0.005, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_under_0.005, na.rm = T)
-  jaccard_05 <- sum(jaccard_df$simulated & jaccard_df$p_under_0.05, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_under_0.05, na.rm = T)
-  jaccard_1 <- sum(jaccard_df$simulated & jaccard_df$p_under_0.1, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_under_0.1, na.rm = T)
+  jaccard_005 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.005, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.005, na.rm = T)
+  jaccard_05 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.05, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.05, na.rm = T)
+  jaccard_1 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.1, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.1, na.rm = T)
   
   # get Jaccard across a range
   # jaccard_thresholds <- quantile(jaccard_df$ttest.adj.BH, seq(0, 1, 0.01), names=F, na.rm = T)
@@ -810,7 +810,7 @@ if (SIMULATED & 'simulated' %in% colnames(X.cells)){
   # jaccard_thresholds[101] <- jaccard_thresholds[101] + 1e-8
   
   jaccards <- sapply(jaccard_thresholds, function(thresh){
-    j <- sum(jaccard_df$simulated & jaccard_df$ttest.adj.BH <= thresh, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$ttest.adj.BH <= thresh, na.rm = T)
+    j <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$ttest.adj.BH <= thresh, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$ttest.adj.BH <= thresh, na.rm = T)
   })
   
   # get max Jaccard and its corresponding p-value
@@ -867,19 +867,19 @@ subj_cts <- subj_cts %>%
 
 subj_cts$da.region.label <- as.character(subj_cts$da.region.label)
 
-if (SIMULATED & 'simulated' %in% colnames(X.cells)){
+if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   # also add what percentage of the cluster is simulated sequences
-  sim_cts <- X.cells %>%
-    dplyr::select('da.region.label', 'simulated') %>%
+  hit_cts <- X.cells %>%
+    dplyr::select('da.region.label', AUC_VAR) %>%
     dplyr::group_by(da.region.label) %>%
-    dplyr::summarise(sim_seqs = sum(simulated == TRUE)) %>%
+    dplyr::summarise(hit_seqs = sum(`AUC_VAR` == TRUE)) %>%
     dplyr::filter(da.region.label != 0)
   
-  sim_cts$da.region.label <- as.character(sim_cts$da.region.label)
+  hit_cts$da.region.label <- as.character(hit_cts$da.region.label)
   
   subj_cts <- subj_cts %>%
-    dplyr::left_join(sim_cts, by = 'da.region.label') %>%
-    dplyr::mutate(pct_sim = sim_seqs / seqs_per_cluster)
+    dplyr::left_join(hit_cts, by = 'da.region.label') %>%
+    dplyr::mutate(pct_hits = hit_seqs / seqs_per_cluster)
 }
 
 # add the statistical info
@@ -908,9 +908,9 @@ stat_table <- data.frame('tool' = c('DAseq'),
                          'depths' = paste(table(X.cells$subject_id), collapse = ', '),
                          check.names = F)
 
-if (SIMULATED == T & 'simulated' %in% colnames(X.cells)){
+if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   
-  stat_table$pct_simulated <- c(mean(X.cells$simulated, na.rm = T) * 100)
+  stat_table$pct_hits <- c(mean(X.cells[[AUC_VAR]], na.rm = T) * 100)
   stat_table$Jaccard_0.005 = jaccard_005
   stat_table$Jaccard_0.05 = jaccard_05
   stat_table$Jaccard_0.1 = jaccard_1
@@ -918,7 +918,7 @@ if (SIMULATED == T & 'simulated' %in% colnames(X.cells)){
   stat_table$Jaccard_max_p = Jaccard_max_p
   stat_table$AUC <- c(p_auroc)
   
-  stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'pct_simulated',
+  stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'pct_hits',
                              'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
                              'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                              'time (min)', 'subjects', 'depths')]

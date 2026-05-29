@@ -21,14 +21,15 @@ process CDR3_SIMILARITY{
     cdr3_similarity.R \
     -md $airr \
     -o . \
-    -da "status" \
+    -da ${params.da_variable} \
     -dg "condition" \
     -t 0.15 \
     -l "single" \
-    -v TRUE \
-    -sc FALSE \
-    -r FALSE \
-    -si TRUE
+    -a ${params.auc_variable} \
+    -v ${params.vdj_info} \
+    -sc ${params.single_cell} \
+    -r ${params.remove_dups} \
+    
 
     """
 }

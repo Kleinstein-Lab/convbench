@@ -203,9 +203,9 @@ summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count
     dplyr::group_by(!!sym(clone_id_col), !!sym(count_col)) %>%
     dplyr::summarise(count_per_cluster = n())
   
-  sim_info <- df_hier_clones %>%
+  hit_info <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col)) %>%
-    dplyr::summarise(simulated_per_cluster = sum(simulated == TRUE))
+    dplyr::summarise(hits_per_cluster = sum(`AUC_VAR` == TRUE))
   
   cluster_cts <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col)) %>%
@@ -214,8 +214,8 @@ summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count
   all_df <- cluster_cts %>%
     dplyr::left_join(subj_info, by = clone_id_col) %>%
     dplyr::mutate(pct_per_cluster = count_per_cluster / total_cluster_seqs) %>%
-    dplyr::left_join(sim_info, by = clone_id_col) %>%
-    dplyr::mutate(pct_sim = simulated_per_cluster / total_cluster_seqs) %>%
+    dplyr::left_join(hit_info, by = clone_id_col) %>%
+    dplyr::mutate(pct_hits = hits_per_cluster / total_cluster_seqs) %>%
     dplyr::right_join(fisher_table, by = clone_id_col, relationship = "many-to-many")
   
   return(all_df)
@@ -302,7 +302,7 @@ parser$add_argument('-o', '--output_dir', type = 'character', default = 'MalID_i
                     help = 'Specify an output directory location.')
 
 parser$add_argument('-da', '--da_variable', type = 'character', default = 'status',
-                    help = 'Stratification variable that should be used to determine for differential abundance. There should be two levels in this factor/categorical variable.')
+                    help = 'Stratification variable that should be used to determine differential abundance. There should be two levels in this factor/categorical variable.')
 
 parser$add_argument('-dg', '--disease_group', type = 'character', default = 'disease',
                     help = 'The disease category.')
@@ -313,17 +313,18 @@ parser$add_argument('-t', '--cluster_threshold', type = 'double', default = '0.1
 parser$add_argument('-l', '--linkage_method', type = 'character', default = 'single',
                     help = 'The linkage method to be used in forming clusters.')
 
+parser$add_argument('-a', '--auc_var', type = 'character', default = FALSE,
+                    help = 'Specify which column should be used for generating AUC curve (i.e. "simulated" or "binder"). Column type should be logical. If no AUC variable, set to FALSE.')
+
 parser$add_argument('-v', '--vdj_info', type = 'logical', default = TRUE,
                     help = 'Is v call and j call information included in the metadata? Can apply to expression or embedding data.')
 
 parser$add_argument('-sc', '--single_cell', type = 'logical', default = FALSE,
-                    help = 'Input true if V(D)J info is present and contains paired heavy and light chain info.')
+                    help = 'Input TRUE if V(D)J info is present and contains paired heavy and light chain info.')
 
 parser$add_argument('-r', '--remove_dups', type = 'logical', default = FALSE,
                     help = 'Will remove duplicate embeddings within an individual if TRUE.')
 
-parser$add_argument('-si', '--simulated', type = 'logical', default = FALSE,
-                    help = 'Specify whether input data is simulated or real.')
 
 # Parse the arguments
 args <- parser$parse_args()
@@ -340,7 +341,7 @@ LINKAGE <- args$linkage_method
 
 VDJ <- args$vdj_info
 SINGLE_CELL <- args$single_cell
-SIMULATED <- args$simulated
+AUC_VAR <- args$auc_var
 REMOVE_DUPS <- args$remove_dups
 
 if (REMOVE_DUPS){
@@ -412,9 +413,9 @@ if (!'v_gene' %in% colnames(md)){
   
 }
 
-if (SIMULATED){
+if (AUC_VAR != FALSE){
   # make sure simulated is recognized
-  md$simulated <- as.logical(md$simulated)
+  md[[AUC_VAR]] <- as.logical(md[[AUC_VAR]])
 }
 
 message(paste0(dplyr::n_distinct(md$subject_id), ' unique subjects and ',
@@ -537,12 +538,12 @@ write.table(summary, file.path(OUTPUT_DIR, 'tables', 'fisher_summary.tsv'),
             sep="\t", quote = F, row.names = F)
   
 # make plots
-if (SIMULATED){
+if (AUC_VAR != FALSE){
   
   make_significant_cluster_plot(fisher_table, convergent_clones, 
-                                'id_col', 0.1, 'convergent_clone_id', 'simulated')
+                                'id_col', 0.1, 'convergent_clone_id', AUC_VAR)
   
-  ggsave(file.path(OUTPUT_DIR, 'figures', 'simulated_results_by_seq_id.png'), 
+  ggsave(file.path(OUTPUT_DIR, 'figures', 'hits_by_seq_id.png'), 
          device="png", width=5, height=4, units="in")
 }
 
@@ -568,8 +569,8 @@ ggsave(file.path(OUTPUT_DIR, 'figures', 'fisher_overview_disease.png'),
 # AUC summary
 cols_of_interest <- c('id_col', 'v_gene', 'j_gene', 'subject_id', 'convergent_clone_id')
 
-if (SIMULATED){
-  cols_of_interest <- c(cols_of_interest, 'simulated')
+if (AUC_VAR != FALSE){
+  cols_of_interest <- c(cols_of_interest, AUC_VAR)
 }
 
 
@@ -601,7 +602,7 @@ stat_table <- data.frame('tool' = c('Mal-ID Model 2'),
 # AUC #
 #######
 
-if (SIMULATED){
+if (AUC_VAR != FALSE){
     
   auc_thresholds <- sort(unique(fisher_table$p_value))
   # auc_thresholds <- quantile(fisher_table$p_value, seq(0, 1, 0.01), names=F)
@@ -621,18 +622,18 @@ if (SIMULATED){
       dplyr::pull(convergent_clone_id) %>%
       unique()
     
-    da_result <- convergent_clones[c('simulated', 'convergent_clone_id')] %>%
+    da_result <- convergent_clones[c(AUC_VAR, 'convergent_clone_id')] %>%
       dplyr::mutate(DA_cell = ifelse(convergent_clone_id %in% sig_clusters, TRUE, FALSE))
     
-    da_result$simulated <- as.logical(da_result$simulated)
+    da_result[[AUC_VAR]] <- as.logical(da_result[[AUC_VAR]])
     
-    true_pos <- sum(da_result$simulated == T & da_result$DA_cell == T)
+    true_pos <- sum(da_result[[AUC_VAR]] == T & da_result$DA_cell == T)
     
-    false_neg <- sum(da_result$simulated == T & da_result$DA_cell == F)
+    false_neg <- sum(da_result[[AUC_VAR]] == T & da_result$DA_cell == F)
     
-    true_neg <- sum(da_result$simulated == F & da_result$DA_cell == F)
+    true_neg <- sum(da_result[[AUC_VAR]] == F & da_result$DA_cell == F)
     
-    false_pos <- sum(da_result$simulated == F & da_result$DA_cell == T)
+    false_pos <- sum(da_result[[AUC_VAR]] == F & da_result$DA_cell == T)
     
     TPR <- true_pos / (true_pos + false_neg)
     FPR <- 1 - (true_neg / (true_neg + false_pos))
@@ -677,9 +678,9 @@ if (SIMULATED){
                   p_under_0.1 = p_value <= 0.1)
   
   # calc jaccard index
-  jaccard_005 <- sum(jaccard_df$simulated & jaccard_df$p_under_0.005, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_under_0.005, na.rm = T)
-  jaccard_05 <- sum(jaccard_df$simulated & jaccard_df$p_under_0.05, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_under_0.05, na.rm = T)
-  jaccard_1 <- sum(jaccard_df$simulated & jaccard_df$p_under_0.1, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_under_0.1, na.rm = T)
+  jaccard_005 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.005, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.005, na.rm = T)
+  jaccard_05 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.05, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.05, na.rm = T)
+  jaccard_1 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.1, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.1, na.rm = T)
   
   # jaccard_thresholds <- seq(0, 1, 0.005)
   jaccard_thresholds <- sort(unique(jaccard_df$p_value))
@@ -687,7 +688,7 @@ if (SIMULATED){
   
   # get Jaccard across a range
   jaccards <- sapply(jaccard_thresholds, function(thresh){
-    j <- sum(jaccard_df$simulated & jaccard_df$p_value <= thresh, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_value <= thresh, na.rm = T)
+    j <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_value <= thresh, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_value <= thresh, na.rm = T)
   })
   
   # get max Jaccard and its corresponding p-value
@@ -717,14 +718,14 @@ if (SIMULATED){
          width = 7,
          height = 5)
     
-  stat_table$pct_simulated <- c(mean(jaccard_df$simulated, na.rm = T) * 100)
+  stat_table$pct_hits <- c(mean(jaccard_df[[AUC_VAR]], na.rm = T) * 100)
   stat_table$Jaccard_0.005 = jaccard_005
   stat_table$Jaccard_0.05 = jaccard_05
   stat_table$Jaccard_0.1 = jaccard_1
   stat_table$Jaccard_max = Jaccard_max
   stat_table$Jaccard_max_p = Jaccard_max_p
   
-  stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'pct_simulated',
+  stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'pct_hits',
                              'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
                              'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                              'time (min)', 'subjects', 'depths')]
