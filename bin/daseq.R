@@ -62,14 +62,20 @@ parser$add_argument('-o', '--output_dir', type = 'character', default = 'DAseq_o
 parser$add_argument('-da', '--da_variable', type = 'character', default = 'status',
                     help = 'Stratification variable that should be used to determine for differential abundance. There should be two levels in this factor/categorical variable.')
 
-parser$add_argument('-m', '--k_min', type = 'integer', default = 50,
+parser$add_argument('-m', '--k_min', type = 'integer', default = 20,
                     help = 'Minimum number of neighbors to use in KNN algorithm.')
 
 parser$add_argument('-t', '--k_step', type = 'integer', default = 50,
                     help = 'Step value for KNN neighbor values.')
 
-parser$add_argument('-x', '--k_max', type = 'integer', default = 300,
+parser$add_argument('-x', '--k_max', type = 'integer', default = 450,
                     help = 'Maximum number of neighbors to use in KNN algorithm.')
+
+parser$add_argument('-re', '--resolution', type = 'double', default = 0.01,
+                    help = 'Clustering resolution. Use a larger value to get more regions.')
+
+parser$add_argument('-mi', '--min_cell', type = 'integer', default = NULL,
+                    help = 'Minimum cells required to form a cluster. If NULL, it will be set to the minimum value in the k-vector.')
 
 parser$add_argument('-a', '--auc_variable', type = 'character', default = FALSE,
                     help = 'Specify which column should be used for generating AUC curve (i.e. "simulated" or "binder"). Column type should be logical. If no AUC variable, set to FALSE.')
@@ -105,6 +111,12 @@ message(paste0('Data will be saved to ', OUTPUT_DIR, '.'))
 DA_VAR <- args$da_variable
 
 KVEC <- seq(args$k_min, args$k_max, args$k_step)
+RESOLUTION <- args$resolution
+MIN_CELL <- args$min_cell
+
+if (MIN_CELL == 'NULL'){
+    MIN_CELL <- NULL
+}
 
 message(paste0('K nearest neighbor values: ', paste0(KVEC, collapse = ' ')))
 
@@ -552,8 +564,9 @@ tryCatch({
     cell.labels = X.label.embeddings,
     labels.1 = label_gps[[1]],
     labels.2 = label_gps[[2]],
-    resolution = 0.01,
+    resolution = RESOLUTION,
     plot.embedding = X.embed,
+    min.cell = MIN_CELL
   )
   
 }, error = function(e){

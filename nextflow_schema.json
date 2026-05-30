@@ -8,7 +8,7 @@
         "universal_options": {
             "title": "Universal options",
             "type": "object",
-            "description": "",
+            "description": "Options that will apply to all convergence tools.",
             "default": "",
             "fa_icon": "fas fa-globe",
             "properties": {
@@ -48,12 +48,33 @@
                 }
             }
         },
+        "daseq_options": {
+            "title": "DAseq options",
+            "type": "object",
+            "description": "Options specific to the DAseq tool.",
+            "default": "",
+            "properties": {
+                "min_cell": {
+                    "type": "string",
+                    "default": "NULL",
+                    "description": "Minimum cells for a cluster to be included in an analysis. Input NULL to use the default, which is the minimum value in the k-vector."
+                },
+                "resolution": {
+                    "type": "number",
+                    "default": 0.01,
+                    "description": "Clustering resolution. Use a larger value to get more regions."
+                }
+            }
+        },
         "input_output_options": {
             "title": "Input/output options",
             "type": "object",
             "fa_icon": "fas fa-terminal",
             "description": "Define where the pipeline should find input data and save output data.",
-            "required": ["input", "outdir"],
+            "required": [
+                "input",
+                "outdir"
+            ],
             "properties": {
                 "input": {
                     "type": "string",
@@ -191,7 +212,14 @@
                     "description": "Method used to save pipeline results to output directory.",
                     "help_text": "The Nextflow `publishDir` option specifies which intermediate files should be saved to the output directory. This option tells the pipeline what method should be used to move these files. See [Nextflow docs](https://www.nextflow.io/docs/latest/process.html#publishdir) for details.",
                     "fa_icon": "fas fa-copy",
-                    "enum": ["symlink", "rellink", "link", "copy", "copyNoFollow", "move"],
+                    "enum": [
+                        "symlink",
+                        "rellink",
+                        "link",
+                        "copy",
+                        "copyNoFollow",
+                        "move"
+                    ],
                     "hidden": true
                 },
                 "email_on_fail": {
@@ -261,7 +289,10 @@
                     "hidden": true
                 },
                 "help": {
-                    "type": ["boolean", "string"],
+                    "type": [
+                        "boolean",
+                        "string"
+                    ],
                     "description": "Display the help message."
                 },
                 "help_full": {
@@ -278,6 +309,9 @@
     "allOf": [
         {
             "$ref": "#/$defs/universal_options"
+        },
+        {
+            "$ref": "#/$defs/daseq_options"
         },
         {
             "$ref": "#/$defs/input_output_options"

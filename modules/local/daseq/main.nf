@@ -29,6 +29,8 @@ process DASEQ{
     -m 20 \
     -t 50 \
     -x 450 \
+    -re ${params.resolution} \
+    -mi ${params.min_cell} \
     -a ${params.auc_variable} \
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \
