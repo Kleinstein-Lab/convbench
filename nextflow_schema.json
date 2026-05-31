@@ -61,7 +61,7 @@
                 },
                 "resolution": {
                     "type": "string",
-                    "default": "0.01"",
+                    "default": "0.01",
                     "description": "Clustering resolution. Use a larger value to get more regions."
                 }
             }
