@@ -71,10 +71,10 @@ parser$add_argument('-t', '--k_step', type = 'integer', default = 50,
 parser$add_argument('-x', '--k_max', type = 'integer', default = 450,
                     help = 'Maximum number of neighbors to use in KNN algorithm.')
 
-parser$add_argument('-re', '--resolution', type = 'double', default = 0.01,
-                    help = 'Clustering resolution. Use a larger value to get more regions.')
+parser$add_argument('-re', '--resolution', type = 'character', default = '0.01',
+                    help = 'Clustering resolution. Use a larger value to get more regions. Note: will be cast as numeric in script.')
 
-parser$add_argument('-mi', '--min_cell', type = 'integer', default = NULL,
+parser$add_argument('-mi', '--min_cell', type = 'character', default = 'NULL',
                     help = 'Minimum cells required to form a cluster. If NULL, it will be set to the minimum value in the k-vector.')
 
 parser$add_argument('-a', '--auc_variable', type = 'character', default = FALSE,
@@ -111,11 +111,13 @@ message(paste0('Data will be saved to ', OUTPUT_DIR, '.'))
 DA_VAR <- args$da_variable
 
 KVEC <- seq(args$k_min, args$k_max, args$k_step)
-RESOLUTION <- args$resolution
+RESOLUTION <- as.numeric(args$resolution)
 MIN_CELL <- args$min_cell
 
 if (MIN_CELL == 'NULL'){
     MIN_CELL <- NULL
+} else{
+  MIN_CELL <- as.numeric(MIN_CELL)
 }
 
 message(paste0('K nearest neighbor values: ', paste0(KVEC, collapse = ' ')))

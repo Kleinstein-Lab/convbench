@@ -60,8 +60,8 @@
                     "description": "Minimum cells for a cluster to be included in an analysis. Input NULL to use the default, which is the minimum value in the k-vector."
                 },
                 "resolution": {
-                    "type": "number",
-                    "default": 0.01,
+                    "type": "string",
+                    "default": "0.01"",
                     "description": "Clustering resolution. Use a larger value to get more regions."
                 }
             }
