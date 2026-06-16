@@ -765,7 +765,7 @@ if (!all(sort(unique(md$subject_id)) == sort(unique(md$sample_id)))){
 if (AUC_VAR != FALSE){
   
   hit_cells <- md %>%
-    dplyr::filter(`AUC_VAR` == TRUE) %>%
+    dplyr::filter(!!sym(AUC_VAR) == TRUE) %>%
     pull(id_col)
   
   hit_pct <- lapply(nhood_sizes$nhood_id, function(nhood){
@@ -837,6 +837,12 @@ stat_table <- data.frame('tool' = c('Milo'),
 
 if (AUC_VAR != FALSE){
   
+  purity_stats <- subj_nhood_cts %>%
+    dplyr::filter(hit_seqs > 0)
+
+  stat_table$num_hit_clusters <- nrow(purity_stats)
+  stat_table$avg_pct_hits <- mean(purity_stats$pct_hits)
+  stat_table$tot_hits <- c(sum(milo@colData[[AUC_VAR]], na.rm = T)) 
   stat_table$pct_hits <- c(mean(milo@colData[[AUC_VAR]], na.rm = T) * 100)
   stat_table$Jaccard_0.005 = jaccard_005
   stat_table$Jaccard_0.05 = jaccard_05
@@ -845,8 +851,8 @@ if (AUC_VAR != FALSE){
   stat_table$Jaccard_max_p = Jaccard_max_p
   stat_table$AUC <- c(auroc)
   
-  stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'pct_hits',
-                             'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
+  stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
+                             'num_hit_clusters', 'avg_pct_hits', 'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
                              'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                              'time (min)', 'subjects', 'depths')]
 }

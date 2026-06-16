@@ -196,17 +196,23 @@ get_combined_fisher_exact_table <- function(hier_clone_df, condition_set, condit
   
 }
 
-summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count_col, alpha){
+summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count_col, alpha, var_of_interest){
   # get a table with info about the significant results coming from the fisher exact test table
   
   subj_info <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col), !!sym(count_col)) %>%
     dplyr::summarise(count_per_cluster = n())
   
-  hit_info <- df_hier_clones %>%
-    dplyr::group_by(!!sym(clone_id_col)) %>%
-    dplyr::summarise(hits_per_cluster = sum(`AUC_VAR` == TRUE))
-  
+  if (var_of_interest == F){
+    hit_info <- df_hier_clones %>%
+      dplyr::group_by(!!sym(clone_id_col)) %>%
+      dplyr::summarise(hit_seqs = NA)
+  } else{
+    hit_info <- df_hier_clones %>%
+      dplyr::group_by(!!sym(clone_id_col)) %>%
+      dplyr::summarise(hit_seqs = sum(!!sym(var_of_interest) == TRUE))
+  }
+
   cluster_cts <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col)) %>%
     dplyr::summarise(total_cluster_seqs = n())
@@ -215,7 +221,7 @@ summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count
     dplyr::left_join(subj_info, by = clone_id_col) %>%
     dplyr::mutate(pct_per_cluster = count_per_cluster / total_cluster_seqs) %>%
     dplyr::left_join(hit_info, by = clone_id_col) %>%
-    dplyr::mutate(pct_hits = hits_per_cluster / total_cluster_seqs) %>%
+    dplyr::mutate(pct_hits = hit_seqs / total_cluster_seqs) %>%
     dplyr::right_join(fisher_table, by = clone_id_col, relationship = "many-to-many")
   
   return(all_df)
@@ -532,7 +538,7 @@ ggsave(file.path(OUTPUT_DIR, 'figures', 'pvalue_hist.png'),
 # get summary info for clusters
 summary <- summarize_clusters(fisher_table, 
                               convergent_clones, 
-                             'convergent_clone_id', 'subject_id', 0.1)
+                             'convergent_clone_id', 'subject_id', 0.1, AUC_VAR)
   
 write.table(summary, file.path(OUTPUT_DIR, 'tables', 'fisher_summary.tsv'), 
             sep="\t", quote = F, row.names = F)
@@ -590,7 +596,7 @@ time_taken <- end_time - start_time
 ###################
 
 # make a summary of stats
-stat_table <- data.frame('tool' = c('Mal-ID Model 2'),
+stat_table <- data.frame('tool' = c('CDR3 Similarity'),
                          'total_seqs' = nrow(convergent_clones),
                          'total_subj' = length(unique(convergent_clones$subject_id)),
                          'time (min)' = as.numeric(time_taken, units = "mins"),
@@ -717,7 +723,13 @@ if (AUC_VAR != FALSE){
          device = 'png',
          width = 7,
          height = 5)
-    
+
+  purity_stats <- summary %>%
+    dplyr::filter(hit_seqs > 0)
+
+  stat_table$num_hit_clusters <- nrow(purity_stats)
+  stat_table$avg_pct_hits <- mean(purity_stats$pct_hits)
+  stat_table$tot_hits <- c(sum(jaccard_df[[AUC_VAR]], na.rm = T)) 
   stat_table$pct_hits <- c(mean(jaccard_df[[AUC_VAR]], na.rm = T) * 100)
   stat_table$Jaccard_0.005 = jaccard_005
   stat_table$Jaccard_0.05 = jaccard_05
@@ -725,8 +737,8 @@ if (AUC_VAR != FALSE){
   stat_table$Jaccard_max = Jaccard_max
   stat_table$Jaccard_max_p = Jaccard_max_p
   
-  stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'pct_hits',
-                             'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
+  stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
+                             'num_hit_clusters', 'avg_pct_hits', 'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
                              'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                              'time (min)', 'subjects', 'depths')]
   

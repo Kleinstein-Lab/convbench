@@ -279,16 +279,22 @@ get_combined_fisher_exact_table <- function(hier_clone_df, condition_set, condit
   
 }
 
-summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count_col, alpha, simulated=TRUE){
+summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count_col, alpha, var_of_interest){
   # get a table with info about the significant results coming from the fisher exact test table
   
   subj_info <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col), !!sym(count_col)) %>%
     dplyr::summarise(count_per_cluster = n())
   
-  sim_info <- df_hier_clones %>%
-    dplyr::group_by(!!sym(clone_id_col)) %>%
-    dplyr::summarise(simulated_per_cluster = sum(simulated == TRUE))
+  if (var_of_interest == F){
+    hit_info <- df_hier_clones %>%
+      dplyr::group_by(!!sym(clone_id_col)) %>%
+      dplyr::summarise(hit_seqs = NA)
+  } else{
+    hit_info <- df_hier_clones %>%
+      dplyr::group_by(!!sym(clone_id_col)) %>%
+      dplyr::summarise(hit_seqs = sum(!!sym(var_of_interest) == TRUE))
+  }
   
   cluster_cts <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col)) %>%
@@ -297,8 +303,8 @@ summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count
   all_df <- cluster_cts %>%
     dplyr::left_join(subj_info, by = clone_id_col) %>%
     dplyr::mutate(pct_per_cluster = count_per_cluster / total_cluster_seqs) %>%
-    dplyr::left_join(sim_info, by = clone_id_col) %>%
-    dplyr::mutate(pct_sim = simulated_per_cluster / total_cluster_seqs) %>%
+    dplyr::left_join(hit_info, by = clone_id_col) %>%
+    dplyr::mutate(pct_hits = hit_seqs / total_cluster_seqs) %>%
     dplyr::right_join(fisher_table, by = clone_id_col, relationship = "many-to-many")
   
   return(all_df)
@@ -406,8 +412,8 @@ parser$add_argument('-t', '--cluster_threshold', type = 'double', default = '60'
 # parser$add_argument('-sc', '--single_cell', type = 'character', default = "FALSE",
 #                    help = 'Input true if V(D)J info is present and contains paired heavy and light chain info.')
 
-parser$add_argument('-si', '--simulated', type = 'character', default = "FALSE",
-                    help = 'Specify whether input data is simulated or real.')
+parser$add_argument('-a', '--auc_var', type = 'character', default = FALSE,
+                    help = 'Specify which column should be used for generating AUC curve (i.e. "simulated" or "binder"). Column type should be logical. If no AUC variable, set to FALSE.')
 
 # Added for running tcrdist
 # e.g. "/home/zhaochenye/anaconda3/envs/env_scissor/bin/python"
@@ -471,7 +477,7 @@ DISEASE_GP <- args$disease_group
 
 THRESH <- args$cluster_threshold
 
-SIMULATED <- as.logical(args$simulated)
+AUC_VAR <- args$auc_var
 
 PYTHON_LOC <- args$python_location
 CONDA_ENV <- args$conda_env
@@ -540,7 +546,6 @@ tryCatch(
   }
   
 )
-
 
 #############################################
 ######## Preprocessings for tcrdist3 ########
@@ -655,9 +660,9 @@ if (!'v_allele' %in% colnames(md)){
   md$j_allele <- alakazam::getAllele(md$j_call, strip_d = F, omit_nl = F) 
 }
 
-# make sure simulated is recognized
-if(SIMULATED){
-    md$simulated <- as.logical(md$simulated)
+if (AUC_VAR != FALSE){
+  # make sure simulated is recognized
+  md[[AUC_VAR]] <- as.logical(md[[AUC_VAR]])
 }
 
 message(paste0(dplyr::n_distinct(md$subject_id), ' unique subjects and ',
@@ -677,13 +682,6 @@ message(paste0('WARNING: Removing ', num_NA_junc, ' sequences with NA in junctio
 md <- md %>%
   dplyr::filter(!is.na(junction)) %>%
   dplyr::filter(!is.na(junction_aa)) 
-
-
-# add simulated column to ensure consistency
-if(!SIMULATED){
-    md$simulated = FALSE
-}
-
 
 ### Rename the columns to fit tcrdist input format ###
 
@@ -768,13 +766,13 @@ fisher_table <- get_combined_fisher_exact_table(hier_clone_df = convergent_clone
 write.table(fisher_table, file.path(OUTPUT_DIR, 'tables', "fisher_table.tsv"), sep="\t", quote = F, row.names = F)
   
 # get summary info for clusters
-summary <- summarize_clusters(fisher_table, convergent_clone, 'convergent_clone_id', 'subject_id', 0.1)
+summary <- summarize_clusters(fisher_table, convergent_clone, 'convergent_clone_id', 'subject_id', 0.1, AUC_VAR)
   
 write.table(summary, file.path(OUTPUT_DIR, 'tables', "fisher_summary.tsv"), sep="\t", quote = F, row.names = F)
   
 # make plots
-if(SIMULATED){
-    make_significant_cluster_plot(fisher_table, convergent_clone,'id_col', 0.1, 'convergent_clone_id', 'simulated')
+if(AUC_VAR != FALSE){
+    make_significant_cluster_plot(fisher_table, convergent_clone,'id_col', 0.1, 'convergent_clone_id', AUC_VAR)
     ggsave(file.path(OUTPUT_DIR, 'figures', 'results_by_seq_id.png'), device="png", width=5, height=4, units="in")
 }
   
@@ -791,8 +789,8 @@ ggsave(file.path(OUTPUT_DIR, 'figures', 'fisher_overview_disease.png'), device="
 # AUC summary
 cols_of_interest <- c('id_col', 'v_gene', 'j_gene', 'subject_id', 'convergent_clone_id')
 
-if (SIMULATED){
-  cols_of_interest <- c(cols_of_interest, 'simulated')
+if (AUC_VAR != FALSE){
+  cols_of_interest <- c(cols_of_interest, AUC_VAR)
 }
 
 sum1 <- convergent_clone[c(cols_of_interest)]
@@ -822,7 +820,7 @@ time_taken <- end_time - start_time
 # AUC #
 #######
 
-if (SIMULATED){
+if (AUC_VAR != FALSE){
     
     # will move to "evaluation", but for now will do it here
     
@@ -833,14 +831,17 @@ if (SIMULATED){
     n_ms_clone = sum(clone_sizes>1) # number of multi-seq (>1) clone
     n_seq_in_clone = sum(clone_sizes[clone_sizes>1]) # number of sequences belonging to a clone
     summary$p_value[summary$convergent_clone_id %in% ss_clone] = 1
-    n_simulated = sum(convergent_clone['simulated']) # number of simulated sequences left
+    n_simulated = sum(convergent_clone[AUC_VAR]) # number of simulated sequences left
     ######################################################################
     
-    auc_thresholds <- quantile(summary$p_value, seq(0, 1, 0.01), names=F)
+    auc_thresholds <- auc_thresholds <- sort(unique(summary$p_value))
     
     # auc_thresholds[1] <- auc_thresholds[1] - 1e-8
-    auc_thresholds[101] <- auc_thresholds[101] + 1e-8
-    
+    # auc_thresholds[101] <- auc_thresholds[101] + 1e-8
+    # add to the largest to make sure the entire curve is captured
+    tot_thresh <- length(auc_thresholds)
+    auc_thresholds[tot_thresh] <- auc_thresholds[tot_thresh] + 1e-3
+
     auc_data <- lapply(auc_thresholds, function(thresh){
       
         # get whether the cells are DA or not at the given threshold
@@ -851,18 +852,18 @@ if (SIMULATED){
             dplyr::pull(convergent_clone_id) %>%
             unique()
       
-        da_result <- convergent_clone[c('simulated', 'convergent_clone_id')] %>%
+        da_result <- convergent_clone[c(AUC_VAR, 'convergent_clone_id')] %>%
             dplyr::mutate(DA_cell = ifelse(convergent_clone_id %in% sig_clusters, TRUE, FALSE))
       
-        da_result$simulated <- as.logical(da_result$simulated)
-      
-        true_pos <- sum(da_result$simulated == T & da_result$DA_cell == T)
-      
-        false_neg <- sum(da_result$simulated == T & da_result$DA_cell == F)
-      
-        true_neg <- sum(da_result$simulated == F & da_result$DA_cell == F)
-      
-        false_pos <- sum(da_result$simulated == F & da_result$DA_cell == T)
+        da_result[[AUC_VAR]] <- as.logical(da_result[[AUC_VAR]])
+        
+        true_pos <- sum(da_result[[AUC_VAR]] == T & da_result$DA_cell == T)
+        
+        false_neg <- sum(da_result[[AUC_VAR]] == T & da_result$DA_cell == F)
+        
+        true_neg <- sum(da_result[[AUC_VAR]] == F & da_result$DA_cell == F)
+        
+        false_pos <- sum(da_result[[AUC_VAR]] == F & da_result$DA_cell == T)
       
         TPR <- true_pos / (true_pos + false_neg)
         FPR <- 1 - (true_neg / (true_neg + false_pos))
@@ -906,17 +907,17 @@ if (SIMULATED){
                     p_under_0.1 = p_value <= 0.1)
     
     # calc jaccard index
-    jaccard_005 <- sum(jaccard_df$simulated & jaccard_df$p_under_0.005, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_under_0.005, na.rm = T)
-    jaccard_05 <- sum(jaccard_df$simulated & jaccard_df$p_under_0.05, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_under_0.05, na.rm = T)
-    jaccard_1 <- sum(jaccard_df$simulated & jaccard_df$p_under_0.1, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_under_0.1, na.rm = T)
-    
+    jaccard_005 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.005, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.005, na.rm = T)
+    jaccard_05 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.05, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.05, na.rm = T)
+    jaccard_1 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.1, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.1, na.rm = T)
+  
     # jaccard_thresholds <- seq(0, 1, 0.005)
     jaccard_thresholds <- sort(unique(jaccard_df$p_value))
     jaccard_thresholds <- jaccard_thresholds[!is.na(jaccard_thresholds)]
     
     # get Jaccard across a range
     jaccards <- sapply(jaccard_thresholds, function(thresh){
-      j <- sum(jaccard_df$simulated & jaccard_df$p_value <= thresh, na.rm = T) / sum(jaccard_df$simulated | jaccard_df$p_value <= thresh, na.rm = T)
+      j <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_value <= thresh, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_value <= thresh, na.rm = T)
     })
     
     # get max Jaccard and its corresponding p-value
@@ -961,20 +962,26 @@ if (SIMULATED){
                              'subjects' = paste(names(table(jaccard_df$subject_id)), collapse = ', '),
                              'depths' = paste(table(jaccard_df$subject_id), collapse = ', '),
                              check.names = F)
+      
+    purity_stats <- summary %>%
+    dplyr::filter(hit_seqs > 0)
+
+    stat_table$num_hit_clusters <- nrow(purity_stats)
+    stat_table$avg_pct_hits <- mean(purity_stats$pct_hits)
+    stat_table$tot_hits <- c(sum(jaccard_df[[AUC_VAR]], na.rm = T)) 
+    stat_table$pct_hits <- c(mean(jaccard_df[[AUC_VAR]], na.rm = T) * 100)
+    stat_table$Jaccard_0.005 = jaccard_005
+    stat_table$Jaccard_0.05 = jaccard_05
+    stat_table$Jaccard_0.1 = jaccard_1
+    stat_table$Jaccard_max = Jaccard_max
+    stat_table$Jaccard_max_p = Jaccard_max_p
     
-    if (SIMULATED == T){
-      
-      stat_table$pct_simulated <- c(mean(jaccard_df$simulated, na.rm = T) * 100)
-      stat_table$Jaccard_0.005 = jaccard_005
-      stat_table$Jaccard_0.05 = jaccard_05
-      stat_table$Jaccard_0.1 = jaccard_1
-      stat_table$Jaccard_max = Jaccard_max
-      stat_table$Jaccard_max_p = Jaccard_max_p
-      
-      #stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'pct_simulated',
-      #                           'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
-      #                           'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
-      #                           'time (min)', 'subjects', 'depths')]
+    stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
+                                'num_hit_clusters', 'avg_pct_hits',
+                                'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
+                                'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
+                                'time (min)', 'subjects', 'depths')]
+
     }
     
     write.table(stat_table, 

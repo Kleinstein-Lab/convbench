@@ -887,7 +887,7 @@ if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   hit_cts <- X.cells %>%
     dplyr::select('da.region.label', AUC_VAR) %>%
     dplyr::group_by(da.region.label) %>%
-    dplyr::summarise(hit_seqs = sum(`AUC_VAR` == TRUE)) %>%
+    dplyr::summarise(hit_seqs = sum(!!sym(AUC_VAR) == TRUE)) %>%
     dplyr::filter(da.region.label != 0)
   
   hit_cts$da.region.label <- as.character(hit_cts$da.region.label)
@@ -925,6 +925,12 @@ stat_table <- data.frame('tool' = c('DAseq'),
 
 if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   
+  purity_stats <- subj_cts %>%
+    dplyr::filter(hit_seqs > 0)
+
+  stat_table$num_hit_clusters <- nrow(purity_stats)
+  stat_table$avg_pct_hits <- mean(purity_stats$pct_hits)
+  stat_table$tot_hits <- c(sum(X.cells[[AUC_VAR]], na.rm = T)) 
   stat_table$pct_hits <- c(mean(X.cells[[AUC_VAR]], na.rm = T) * 100)
   stat_table$Jaccard_0.005 = jaccard_005
   stat_table$Jaccard_0.05 = jaccard_05
@@ -933,8 +939,8 @@ if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   stat_table$Jaccard_max_p = Jaccard_max_p
   stat_table$AUC <- c(p_auroc)
   
-  stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'pct_hits',
-                             'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
+  stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
+                             'num_hit_clusters', 'avg_pct_hits', 'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
                              'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                              'time (min)', 'subjects', 'depths')]
 }

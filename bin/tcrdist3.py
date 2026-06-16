@@ -315,4 +315,7 @@ def tcrdist3_clusters(seqs,id_col,
     seqs_new['convergent_clone_id'] = clusters.astype(str)
     seqs_new['clone_id_full'] = seqs_new['convergent_clone_id'].astype(str) + '_' + seqs_new['subject_id'].astype(str)
     
+    for col in seqs_new.columns:
+        seqs_new[col] = seqs_new[col].to_numpy()
+
     return(seqs_new)
