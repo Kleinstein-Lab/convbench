@@ -350,6 +350,12 @@ SINGLE_CELL <- args$single_cell
 AUC_VAR <- args$auc_var
 REMOVE_DUPS <- args$remove_dups
 
+if (AUC_VAR != FALSE){
+  message(paste0('AUC variable ', AUC_VAR, ' will be used.'))
+} else{
+  message('AUC will not be calculated.')
+}
+
 if (REMOVE_DUPS){
   message('Duplicate embeddings within a subject will be collapsed.')
 }

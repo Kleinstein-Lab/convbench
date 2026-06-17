@@ -144,9 +144,9 @@ if (SINGLE_CELL){
 }
 
 if (AUC_VAR != FALSE){
-  message('Simulated data present.')
+  message(paste0('AUC variable ', AUC_VAR, ' will be used.'))
 } else{
-  message('Simulated data not present.')
+  message('AUC will not be calculated.')
 }
 
 if (REMOVE_DUPS){
