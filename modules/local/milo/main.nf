@@ -24,7 +24,7 @@ process MILO{
     -md $airr \
     -o . \
     -da ${params.da_variable} \
-    -k 20 \
+    -k ${params.milo_k_val} \
     -pr 0.1 \
     -a ${params.auc_variable} \
     -v ${params.vdj_info} \

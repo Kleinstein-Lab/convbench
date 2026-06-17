@@ -21,6 +21,41 @@ suppressPackageStartupMessages({
 
 set.seed(37)
 
+########################
+### HELPER FUNCTIONS ###
+########################
+
+make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq_col, auc_variable){
+
+  ggplot(purity_data, aes(x = !!sym(cluster_id_col), y = !!sym(pct_hit_col))) +
+    geom_col(fill = 'dodgerblue3') +
+    geom_text(
+      aes(label = !!sym(total_seq_col)),
+      vjust = -0.5
+    ) +
+    scale_y_continuous(
+      labels = function(x) paste0(x * 100, "%"),
+      limits = c(0, 1.05)
+    ) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(
+        angle = 45,
+        hjust = 1
+      )
+    ) +
+    labs(x = 'Cluster ID',
+         y = paste0('Percent ', auc_variable))
+    
+  ggsave(file.path(OUTPUT_DIR, 'figures', 'cluster_purity.png'), 
+         device="png", width=5, height=4, units="in")
+
+}
+
+########################
+### PREP ENVIRONMENT ###
+########################
+
 # prepare to take input parameters
 parser <- ArgumentParser(description = "Data location and Milo algorithm hyperparameters.")
 
@@ -838,7 +873,12 @@ stat_table <- data.frame('tool' = c('Milo'),
 if (AUC_VAR != FALSE){
   
   purity_stats <- subj_nhood_cts %>%
-    dplyr::filter(hit_seqs > 0)
+    dplyr::filter(hit_seqs > 0) %>%
+    dplyr::select(-c('subject_id', 'cells_per_subj', 'pct_subj')) %>%
+    distinct()
+
+  # document "purity" of clusters with simulated sequences visually
+  make_purity_plot(purity_stats, 'nhood_id', 'pct_hits', 'cells_per_nhood', AUC_VAR)
 
   stat_table$num_hit_clusters <- nrow(purity_stats)
   stat_table$avg_pct_hits <- mean(purity_stats$pct_hits)

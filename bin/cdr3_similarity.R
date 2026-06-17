@@ -295,6 +295,33 @@ make_fisher_overview_plot <- function(fisher_table, df_hier_clones, level, condi
   
 }
 
+make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq_col, auc_variable){
+
+  ggplot(purity_data, aes(x = !!sym(cluster_id_col), y = !!sym(pct_hit_col))) +
+    geom_col(fill = 'dodgerblue3') +
+    geom_text(
+      aes(label = !!sym(total_seq_col)),
+      vjust = -0.5
+    ) +
+    scale_y_continuous(
+      labels = function(x) paste0(x * 100, "%"),
+      limits = c(0, 1.05)
+    ) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(
+        angle = 45,
+        hjust = 1
+      )
+    ) +
+    labs(x = 'Cluster ID',
+         y = paste0('Percent ', auc_variable))
+    
+  ggsave(file.path(OUTPUT_DIR, 'figures', 'cluster_purity.png'), 
+         device="png", width=5, height=4, units="in")
+
+}
+
 ##############################
 ### SET UP THE ENVIRONMENT ###
 ##############################
@@ -731,7 +758,12 @@ if (AUC_VAR != FALSE){
          height = 5)
 
   purity_stats <- summary %>%
-    dplyr::filter(hit_seqs > 0)
+    dplyr::filter(hit_seqs > 0) %>%
+    dplyr::select(-c('subject_id', 'count_per_cluster', 'pct_per_cluster', 'count_column')) %>%
+    distinct()
+
+  # document "purity" of clusters with simulated sequences visually
+  make_purity_plot(purity_stats, 'convergent_clone_id', 'pct_hits', 'total_cluster_seqs', AUC_VAR)
 
   stat_table$num_hit_clusters <- nrow(purity_stats)
   stat_table$avg_pct_hits <- mean(purity_stats$pct_hits)
@@ -744,7 +776,8 @@ if (AUC_VAR != FALSE){
   stat_table$Jaccard_max_p = Jaccard_max_p
   
   stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
-                             'num_hit_clusters', 'avg_pct_hits', 'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
+                             'num_hit_clusters', 'avg_pct_hits', 
+                             'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
                              'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                              'time (min)', 'subjects', 'depths')]
   

@@ -21,8 +21,10 @@ dependencies:
   - conda-forge::r-ggrepel
   - conda-forge::r-argparse
   - conda-forge::r-reticulate
+  - conda-forge::r-arrow
   - conda-forge::r-airr
   - conda-forge::r-scales
+  - conda-forge::r-pracma
   # Bioconductor R packages
   - bioconda::bioconductor-biostrings
   # pip python packages

@@ -26,9 +26,9 @@ process DASEQ{
     -md $airr \
     -o . \
     -da ${params.da_variable} \
-    -m 20 \
-    -t 50 \
-    -x 450 \
+    -m ${params.daseq_min_k} \
+    -t ${params.daseq_step_k} \
+    -x ${params.daseq_max_k} \
     -re ${params.resolution} \
     -mi ${params.min_cell} \
     -a ${params.auc_variable} \

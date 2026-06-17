@@ -30,7 +30,7 @@ process BCRDIST{
     -da "status" \
     -dg "condition" \
     -t 60 \
-    -si TRUE \
+    -a ${params.auc_variable} \
     -py "/opt/conda/envs/bcrdist/bin/python" \
     -i FALSE \
     -c 4 \

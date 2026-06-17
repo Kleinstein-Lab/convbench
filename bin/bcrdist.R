@@ -11,6 +11,8 @@ suppressPackageStartupMessages({
   library(ggrepel)
   library(argparse)
   library(reticulate)
+  library(arrow)
+  library(pracma)
   library(Biostrings)
   library(scales)
 })
@@ -220,7 +222,7 @@ get_fisher_exact_table <- function(hier_clone_df, condition, condition_col = 'st
   
   cat("Completing Fisher's Exact tests...", end="\n")
   # do all the fisher tests
-  fisher_results_all <- pbapply::pblapply(convergent_clones_testable, function(clone_id){
+  fisher_results_all <- lapply(convergent_clones_testable, function(clone_id){
     
     # do test
     fisher_results <- fisher_test_cluster(hier_clone_df_fisher, subj_summary, clone_id, condition, condition_col, clone_id_col, count_col)
@@ -378,7 +380,32 @@ make_fisher_overview_plot <- function(fisher_table, df_hier_clones, level, condi
   
 }
 
+make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq_col, auc_variable){
 
+  ggplot(purity_data, aes(x = !!sym(cluster_id_col), y = !!sym(pct_hit_col))) +
+    geom_col(fill = 'dodgerblue3') +
+    geom_text(
+      aes(label = !!sym(total_seq_col)),
+      vjust = -0.5
+    ) +
+    scale_y_continuous(
+      labels = function(x) paste0(x * 100, "%"),
+      limits = c(0, 1.05)
+    ) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(
+        angle = 45,
+        hjust = 1
+      )
+    ) +
+    labs(x = 'Cluster ID',
+         y = paste0('Percent ', auc_variable))
+    
+  ggsave(file.path(OUTPUT_DIR, 'figures', 'cluster_purity.png'), 
+         device="png", width=5, height=4, units="in")
+
+}
 
 ##############################
 ### SET UP THE ENVIRONMENT ###
@@ -704,7 +731,7 @@ seqs = seqs %>%
 # measure how long the tcrdist3 process itself takes
 start_time <- Sys.time()
 
-seqs_new = tryCatch({
+seqs_new_py = tryCatch({
     tcrdist3_clusters(seqs,
                       cpus=CPU,
                       chunk_size=CHUNK_SIZE, # the minibatch size
@@ -721,8 +748,13 @@ seqs_new = tryCatch({
       stop(e) # re-throw the error to halt execution
   })
 
+seqs_new <- py_to_r(seqs_new_py)
 seqs_new$subject_id = NULL # avoid duplication with md
 convergent_clone = right_join(md,seqs_new,by = 'id_col')
+
+convergent_clone$count <- unlist(convergent_clone$count)
+
+print(convergent_clone[1:5,c('id_col', 'count')])
 
 # Saving the clusters
 # Only for testing, will comment out
@@ -803,18 +835,18 @@ write.table(sum, file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"), sep="\t", q
 end_time <- Sys.time()
 time_taken <- end_time - start_time
 
-# SKIP FOR NOW AND JUST DO AUC INSTEAD
-# cluster centroids
+###################
+### RUN SUMMARY ###
+###################
 
-# place new sequences in clusters
-
-# featurization
-
-# logistic regression (switch to Python)
-
-################
-### DATA VIZ ###
-################
+# make a summary of stats
+stat_table <- data.frame('tool' = c('BCRdist'),
+                         'total_seqs' = nrow(sum),
+                         'total_subj' = length(unique(sum$subject_id)),
+                         'time (min)' = as.numeric(time_taken, units = "mins"),
+                         'subjects' = paste(names(table(sum$subject_id)), collapse = ', '),
+                         'depths' = paste(table(sum$subject_id), collapse = ', '),
+                         check.names = F)
 
 #######
 # AUC #
@@ -894,6 +926,8 @@ if (AUC_VAR != FALSE){
            device = 'png',
            width = 7,
            height = 6)
+
+    stat_table$AUC <- c(auroc)
     
     ###########
     # JACCARD #
@@ -950,21 +984,15 @@ if (AUC_VAR != FALSE){
     ###################
     ### RUN SUMMARY ###
     ###################
-    
-    # make a summary of stats
-    stat_table <- data.frame('tool' = c('BCRdist'),
-                             'total_seqs' = nrow(jaccard_df),
-                             'total_subj' = length(unique(jaccard_df$subject_id)),
-                             'total_clusters' = n_ms_clone, # total number of convergent clones/clusters
-                             'clustered_seqs' = n_seq_in_clone, # number of sequences belonging to a convergent clone/cluster
-                             'AUC' = c(auroc),
-                             'time (min)' = as.numeric(time_taken, units = "mins"),
-                             'subjects' = paste(names(table(jaccard_df$subject_id)), collapse = ', '),
-                             'depths' = paste(table(jaccard_df$subject_id), collapse = ', '),
-                             check.names = F)
+
       
     purity_stats <- summary %>%
-    dplyr::filter(hit_seqs > 0)
+      dplyr::filter(hit_seqs > 0) %>%
+      dplyr::select(-c('subject_id', 'count_per_cluster', 'pct_per_cluster', 'count_column')) %>%
+      distinct()
+
+    # document "purity" of clusters with simulated sequences visually
+    make_purity_plot(purity_stats, 'convergent_clone_id', 'pct_hits', 'total_cluster_seqs', AUC_VAR)
 
     stat_table$num_hit_clusters <- nrow(purity_stats)
     stat_table$avg_pct_hits <- mean(purity_stats$pct_hits)
@@ -987,9 +1015,6 @@ if (AUC_VAR != FALSE){
     write.table(stat_table, 
                 file.path(OUTPUT_DIR, 'tables', 'run_stats.tsv'), 
                 sep = '\t', row.names = F, quote = F)
-    
-}
-
 
 message(paste0('Ending run: ', Sys.time()))
 
