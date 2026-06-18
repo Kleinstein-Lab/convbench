@@ -10,13 +10,14 @@ process DASEQ{
     output:
     path "tables/run_stats.tsv", emit: run_stats
     path "tables/da_score_auc_curve_vals.tsv", emit: da_score_auc_vals, optional: true
-    path "tables/p_auc_curve_vals.tsv", emit: p_auc_vals, optional: true
+    path "tables/p_auc_curve_vals_*.tsv", emit: p_auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
     path "tables/da_seqs.tsv", emit: da_seqs
     path "tables/region_stats.tsv", emit: region_stats
     path "tables/cluster_cts.tsv", emit: cluster_cts
     path "tables/UMAP_embeddings.rds", emit: daseq_umap
     path "tables/da_cells.rds", emit: da_cells, optional: true
+    path "tables/fisher_table.tsv", emit: fisher_table
     path "figures/*.png", emit: figs
 
     script:
@@ -26,6 +27,7 @@ process DASEQ{
     -md $airr \
     -o . \
     -da ${params.da_variable} \
+    -dg "condition" \
     -m ${params.daseq_min_k} \
     -t ${params.daseq_step_k} \
     -x ${params.daseq_max_k} \

@@ -392,7 +392,7 @@ make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq
       labels = function(x) paste0(x * 100, "%"),
       limits = c(0, 1.05)
     ) +
-    theme_bw() +
+    theme_bw(base_size = 10) +
     theme(
       axis.text.x = element_text(
         angle = 45,
@@ -403,7 +403,7 @@ make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq
          y = paste0('Percent ', auc_variable))
     
   ggsave(file.path(OUTPUT_DIR, 'figures', 'cluster_purity.png'), 
-         device="png", width=5, height=4, units="in")
+         device="png", width=10, height=5, units="in")
 
 }
 

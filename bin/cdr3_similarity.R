@@ -196,7 +196,7 @@ get_combined_fisher_exact_table <- function(hier_clone_df, condition_set, condit
   
 }
 
-summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count_col, alpha, var_of_interest){
+summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count_col, var_of_interest){
   # get a table with info about the significant results coming from the fisher exact test table
   
   subj_info <- df_hier_clones %>%
@@ -307,7 +307,7 @@ make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq
       labels = function(x) paste0(x * 100, "%"),
       limits = c(0, 1.05)
     ) +
-    theme_bw() +
+    theme_bw(base_size = 10) +
     theme(
       axis.text.x = element_text(
         angle = 45,
@@ -318,8 +318,80 @@ make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq
          y = paste0('Percent ', auc_variable))
     
   ggsave(file.path(OUTPUT_DIR, 'figures', 'cluster_purity.png'), 
-         device="png", width=5, height=4, units="in")
+         device="png", width=10, height=5, units="in")
 
+}
+
+make_auc_curve <- function(results_table, seq_table, p_val_col, cluster_id_col, auc_variable, name){
+  # results table = table containing some kind of test result (Fisher Exact, Wilcox, etc.)
+  # seq_table = table containing sequence-level information including auc_variable and cluster_id_col
+  #             used to identify the correct category for each sequence
+  # p_val_col = the column you want to use for p values to make AUC thresholds
+  # cluster_id_col = IDs specifying clusters that were tested
+  # auc_variable = variable to use for getting positives in the AUC curve
+  # name = a name to specify for saving figures and tables (i.e. the name of the test)
+
+  auc_thresholds <- sort(unique(results_table[[p_val_col]]))
+  
+  # add to the largest to make sure the entire curve is captured
+  tot_thresh <- length(auc_thresholds)
+  auc_thresholds[tot_thresh] <- auc_thresholds[tot_thresh] + 1e-3
+  
+  auc_data <- lapply(auc_thresholds, function(thresh){
+    
+    # get whether the cells are DA or not at the given threshold
+    
+    # get significant clusters
+    sig_clusters <- results_table %>%
+      dplyr::filter(!!sym(p_val_col) < thresh) %>%
+      dplyr::pull(cluster_id_col) %>%
+      unique()
+    
+    da_result <- seq_table[c(auc_variable, cluster_id_col)] %>%
+      dplyr::mutate(DA_cell = ifelse(!!sym(cluster_id_col) %in% sig_clusters, TRUE, FALSE))
+    
+    da_result[[auc_variable]] <- as.logical(da_result[[auc_variable]])
+    
+    true_pos <- sum(da_result[[auc_variable]] == T & da_result$DA_cell == T)
+    
+    false_neg <- sum(da_result[[auc_variable]] == T & da_result$DA_cell == F)
+    
+    true_neg <- sum(da_result[[auc_variable]] == F & da_result$DA_cell == F)
+    
+    false_pos <- sum(da_result[[auc_variable]] == F & da_result$DA_cell == T)
+    
+    TPR <- true_pos / (true_pos + false_neg)
+    FPR <- 1 - (true_neg / (true_neg + false_pos))
+    
+    return(data.frame('TPR' = TPR,
+                      'FPR' = FPR))
+    
+  })
+  
+  auc_df <- do.call(rbind, auc_data)
+  auc_df[[p_val_col]] <- auc_thresholds
+  
+  write.table(auc_df, 
+              file.path(OUTPUT_DIR, 'tables', paste0('auc_curve_vals_', name, '.tsv')), 
+              sep = '\t', row.names = F, quote = F)
+  
+  # get auroc
+  auroc <- pracma::trapz(auc_df$FPR, auc_df$TPR)
+  
+  auc_df %>%
+    ggplot(aes(x = FPR, y = TPR)) +
+    geom_point() +
+    geom_line() +
+    labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
+         subtitle = paste0(name, ' AUC: ', round(auroc, 3))) + 
+    theme_minimal()
+  
+  ggsave(file.path(OUTPUT_DIR, 'figures', paste0('AUC_curve_', name, '.png')),
+         device = 'png',
+         width = 7,
+         height = 6)
+
+  return(auroc)
 }
 
 ##############################
@@ -562,19 +634,23 @@ fisher_table %>%
   ggplot(aes(x = p_value)) + 
   geom_histogram(color = 'white', binwidth = 0.01) + 
   theme_bw() +
-  labs(title = 'Mal-ID P-Value Distribution') +
+  labs(title = 'CDR3 Similarity Fisher P-Value Distribution') +
   coord_cartesian(xlim = c(0, 1))
 
-ggsave(file.path(OUTPUT_DIR, 'figures', 'pvalue_hist.png'),
+ggsave(file.path(OUTPUT_DIR, 'figures', 'pvalue_hist_fisher.png'),
        device = 'png', width = 8, height = 6, units = 'in')
   
 # get summary info for clusters
-summary <- summarize_clusters(fisher_table, 
-                              convergent_clones, 
-                             'convergent_clone_id', 'subject_id', 0.1, AUC_VAR)
-  
-write.table(summary, file.path(OUTPUT_DIR, 'tables', 'fisher_summary.tsv'), 
-            sep="\t", quote = F, row.names = F)
+summary_fisher <- summarize_clusters(fisher_table, 
+                                     convergent_clones, 
+                                     'convergent_clone_id', 'subject_id', AUC_VAR)
+
+summary_fisher <- summary_fisher %>%
+  rename(
+    p_value_fisher = p_value,
+    fdr_fisher = fdr,
+    odds_ratio_fisher = odds_ratio
+)
   
 # make plots
 if (AUC_VAR != FALSE){
@@ -615,6 +691,8 @@ if (AUC_VAR != FALSE){
 
 sum1 <- convergent_clones[c(cols_of_interest)]
 sum2 <- fisher_table[c('convergent_clone_id', 'p_value', 'odds_ratio', 'fdr')] %>% distinct()
+colnames(sum2) <- c('convergent_clone_id', 'p_value_fisher', 'odds_ratio_fisher', 'fdr_fisher')
+
 sum <- dplyr::left_join(sum1, sum2, by = 'convergent_clone_id')
 
 write.table(sum, file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"), 
@@ -624,12 +702,99 @@ write.table(sum, file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"),
 end_time <- Sys.time()
 time_taken <- end_time - start_time
 
+#####################
+### WILCOXON TEST ###
+#####################
+
+# TODO: turn below code into a function to make it easier to transport to Milo
+
+# information required: 
+# depth per person
+# number of sequences from each person in each cluster
+# group identity of each person
+# use to get ratio of seqs in cluster / depth for each
+# then do Wilcox test disease vs. control for each --> use apply loop
+
+message('Completing Wilcoxon DA tests...')
+# Subject sequencing depths
+subject_depths <- convergent_clones %>%
+  dplyr::group_by(subject_id, status) %>%
+  dplyr::summarize(subj_depth = n())
+
+# Cluster frequencies per subject
+cluster_subject_freqs <- convergent_clones %>%
+  dplyr::group_by(convergent_clone_id, subject_id) %>%
+  dplyr::summarize(cluster_sequences = n()) %>%
+  dplyr::left_join(subject_depths, by = 'subject_id') %>%
+  dplyr::mutate(normalized_freq = cluster_sequences / subj_depth) %>%
+  tidyr::pivot_wider(id_cols = 'convergent_clone_id', 
+                     names_from = 'subject_id', 
+                     values_from = 'normalized_freq', 
+                     values_fill = 0) %>%
+  as.data.frame(check.names = F)
+
+write.table(cluster_subject_freqs, 
+            file.path(OUTPUT_DIR, 'tables', 'cluster_subject_freqs.tsv'), 
+            sep = '\t', row.names = F, quote = F)
+
+row.names(cluster_subject_freqs) <- as.character(cluster_subject_freqs$convergent_clone_id)
+cluster_subject_freqs <- cluster_subject_freqs %>%
+                            dplyr::select(-convergent_clone_id)
+
+ctrl <- subject_depths %>%
+          dplyr::filter(!!sym(DA_VAR) != DISEASE_GP) %>%
+          dplyr::pull(subject_id)
+
+dis <- subject_depths %>%
+          dplyr::filter(!!sym(DA_VAR) == DISEASE_GP) %>%
+          dplyr::pull(subject_id)
+
+wilcox_res_list <- lapply(row.names(cluster_subject_freqs), function(clust){
+  x <- as.numeric(cluster_subject_freqs[clust,ctrl])
+  y <- as.numeric(cluster_subject_freqs[clust,dis])
+  p_val <- wilcox.test(x, y, exact = FALSE)$p.value
+  return(data.frame(convergent_clone_id = clust,
+                    p_value = p_val))
+})
+
+wilcox_res <- do.call(rbind, wilcox_res_list)
+wilcox_res$p_adj <- p.adjust(wilcox_res$p_value, method = 'BH')
+
+write.table(wilcox_res, 
+            file.path(OUTPUT_DIR, 'tables', 'wilcox_res.tsv'), 
+            sep = '\t', row.names = F, quote = F)
+
+wilcox_sum <- wilcox_res
+colnames(wilcox_sum) <- c('convergent_clone_id', 'p_value_wilcox', 'fdr_wilcox')
+
+sum <- dplyr::left_join(sum, wilcox_sum, by = 'convergent_clone_id')
+
+write.table(sum, file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"), 
+            sep="\t", quote = F, row.names = F)
+
+wilcox_res %>%
+  ggplot(aes(x = p_value)) + 
+  geom_histogram(color = 'white', binwidth = 0.01) + 
+  theme_bw() +
+  labs(title = 'CDR3 Similarity Wilcoxon P-Value Distribution') +
+  coord_cartesian(xlim = c(0, 1))
+
+ggsave(file.path(OUTPUT_DIR, 'figures', 'pvalue_hist_wilcox.png'),
+       device = 'png', width = 8, height = 6, units = 'in')
+
+summary <- summary_fisher %>%
+  dplyr::inner_join(wilcox_sum, by = 'convergent_clone_id')
+  
+write.table(summary, file.path(OUTPUT_DIR, 'tables', 'cluster_subj_summary.tsv'), 
+            sep="\t", quote = F, row.names = F)
+  
+
 ###################
 ### RUN SUMMARY ###
 ###################
 
 # make a summary of stats
-stat_table <- data.frame('tool' = c('CDR3 Similarity'),
+stat_table <- data.frame('tool' = c('CDR3 Similarity + Fisher', 'CDR3 Similarity + Wilcoxon'),
                          'total_seqs' = nrow(convergent_clones),
                          'total_subj' = length(unique(convergent_clones$subject_id)),
                          'time (min)' = as.numeric(time_taken, units = "mins"),
@@ -642,79 +807,24 @@ stat_table <- data.frame('tool' = c('CDR3 Similarity'),
 #######
 
 if (AUC_VAR != FALSE){
-    
-  auc_thresholds <- sort(unique(fisher_table$p_value))
-  # auc_thresholds <- quantile(fisher_table$p_value, seq(0, 1, 0.01), names=F)
-  # auc_thresholds[1] <- auc_thresholds[1] - 1e-8
+  message('Making AUC curves...')
+  # do AUC curve with the Fisher Exact results
+  fisher_auc <- make_auc_curve(fisher_table, convergent_clones, 'p_value', 'convergent_clone_id', 'simulated', 'Fisher')
+
+  # do AUC curve with the Wilcoxon results
+  wilcox_auc <- make_auc_curve(wilcox_res, convergent_clones, 'p_value', 'convergent_clone_id', 'simulated', 'Wilcoxon')
   
-  # add to the largest to make sure the entire curve is captured
-  tot_thresh <- length(auc_thresholds)
-  auc_thresholds[tot_thresh] <- auc_thresholds[tot_thresh] + 1e-3
-  
-  auc_data <- lapply(auc_thresholds, function(thresh){
-    
-    # get whether the cells are DA or not at the given threshold
-    
-    # get significant clusters
-    sig_clusters <- fisher_table %>%
-      dplyr::filter(p_value < thresh) %>%
-      dplyr::pull(convergent_clone_id) %>%
-      unique()
-    
-    da_result <- convergent_clones[c(AUC_VAR, 'convergent_clone_id')] %>%
-      dplyr::mutate(DA_cell = ifelse(convergent_clone_id %in% sig_clusters, TRUE, FALSE))
-    
-    da_result[[AUC_VAR]] <- as.logical(da_result[[AUC_VAR]])
-    
-    true_pos <- sum(da_result[[AUC_VAR]] == T & da_result$DA_cell == T)
-    
-    false_neg <- sum(da_result[[AUC_VAR]] == T & da_result$DA_cell == F)
-    
-    true_neg <- sum(da_result[[AUC_VAR]] == F & da_result$DA_cell == F)
-    
-    false_pos <- sum(da_result[[AUC_VAR]] == F & da_result$DA_cell == T)
-    
-    TPR <- true_pos / (true_pos + false_neg)
-    FPR <- 1 - (true_neg / (true_neg + false_pos))
-    
-    return(data.frame('TPR' = TPR,
-                      'FPR' = FPR))
-    
-  })
-  
-  auc_df <- do.call(rbind, auc_data)
-  auc_df$p_value <- auc_thresholds
-  
-  write.table(auc_df, 
-              file.path(OUTPUT_DIR, 'tables', 'auc_curve_vals.tsv'), 
-              sep = '\t', row.names = F, quote = F)
-  
-  # get auroc
-  auroc <- pracma::trapz(auc_df$FPR, auc_df$TPR)
-  
-  auc_df %>%
-    ggplot(aes(x = FPR, y = TPR)) +
-    geom_point() +
-    geom_line() +
-    labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
-         subtitle = paste0('AUC: ', round(auroc, 3))) + 
-    theme_minimal()
-  
-  ggsave(file.path(OUTPUT_DIR, 'figures', 'AUC_curve.png'),
-         device = 'png',
-         width = 7,
-         height = 6)
-  
-  stat_table$AUC <- c(auroc)
+  stat_table[1, 'AUC'] <- c(fisher_auc)
+  stat_table[2, 'AUC'] <- c(wilcox_auc)
   
   ###########
   # JACCARD #
   ###########
   
   jaccard_df <- sum %>%
-    dplyr::mutate(p_under_0.005 = p_value <= 0.005,
-                  p_under_0.05 = p_value <= 0.05,
-                  p_under_0.1 = p_value <= 0.1)
+    dplyr::mutate(p_under_0.005 = p_value_fisher <= 0.005,
+                  p_under_0.05 = p_value_fisher <= 0.05,
+                  p_under_0.1 = p_value_fisher <= 0.1)
   
   # calc jaccard index
   jaccard_005 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.005, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.005, na.rm = T)
@@ -722,12 +832,12 @@ if (AUC_VAR != FALSE){
   jaccard_1 <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_under_0.1, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_under_0.1, na.rm = T)
   
   # jaccard_thresholds <- seq(0, 1, 0.005)
-  jaccard_thresholds <- sort(unique(jaccard_df$p_value))
+  jaccard_thresholds <- sort(unique(jaccard_df$p_value_fisher))
   jaccard_thresholds <- jaccard_thresholds[!is.na(jaccard_thresholds)]
   
   # get Jaccard across a range
   jaccards <- sapply(jaccard_thresholds, function(thresh){
-    j <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_value <= thresh, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_value <= thresh, na.rm = T)
+    j <- sum(jaccard_df[[AUC_VAR]] & jaccard_df$p_value_fisher <= thresh, na.rm = T) / sum(jaccard_df[[AUC_VAR]] | jaccard_df$p_value_fisher <= thresh, na.rm = T)
   })
   
   # get max Jaccard and its corresponding p-value
@@ -769,11 +879,11 @@ if (AUC_VAR != FALSE){
   stat_table$avg_pct_hits <- mean(purity_stats$pct_hits)
   stat_table$tot_hits <- c(sum(jaccard_df[[AUC_VAR]], na.rm = T)) 
   stat_table$pct_hits <- c(mean(jaccard_df[[AUC_VAR]], na.rm = T) * 100)
-  stat_table$Jaccard_0.005 = jaccard_005
-  stat_table$Jaccard_0.05 = jaccard_05
-  stat_table$Jaccard_0.1 = jaccard_1
-  stat_table$Jaccard_max = Jaccard_max
-  stat_table$Jaccard_max_p = Jaccard_max_p
+  stat_table$Jaccard_0.005 = c(jaccard_005, NA) # not doing the Jaccard stats for Wilcoxon, at least for now
+  stat_table$Jaccard_0.05 = c(jaccard_05, NA)
+  stat_table$Jaccard_0.1 = c(jaccard_1, NA)
+  stat_table$Jaccard_max = c(Jaccard_max, NA)
+  stat_table$Jaccard_max_p = c(Jaccard_max_p, NA)
   
   stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
                              'num_hit_clusters', 'avg_pct_hits', 

@@ -1,6 +1,6 @@
 process BCRDIST{
     tag "${meta.id}"
-    label 'process_medium'
+    label 'process_high'
 
     container "docker.io/cfsullivan16/bcrdist:1.0.0dev"
 
@@ -33,7 +33,7 @@ process BCRDIST{
     -a ${params.auc_variable} \
     -py "/opt/conda/envs/bcrdist/bin/python" \
     -i FALSE \
-    -c 4 \
+    -c ${task.cpus} \
     -cs 1000 \
     -r 60 \
     -m "greedy"

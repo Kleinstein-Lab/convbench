@@ -9,11 +9,13 @@ process CDR3_SIMILARITY{
 
     output:
     path "tables/run_stats.tsv", emit: run_stats
-    path "tables/auc_curve_vals.tsv", emit: auc_vals, optional: true
+    path "tables/auc_curve_vals_*.tsv", emit: auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
     path "tables/seq_summary.tsv", emit: seq_summary
-    path "tables/fisher_summary.tsv", emit: fisher_summary
+    path "tables/cluster_subj_summary.tsv", emit: cluster_subj_summary
     path "tables/fisher_table.tsv", emit: fisher_table
+    path "tables/cluster_subject_freqs.tsv", emit: cluster_subject_freqs
+    path "tables/wilcox_res.tsv", emit: wilcox_res
     path "figures/*.png", emit: figs
 
     script:
