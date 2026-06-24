@@ -862,11 +862,11 @@ if (AUC_VAR != FALSE){
     ss_clone = names(clone_sizes)[clone_sizes==1]
     n_ms_clone = sum(clone_sizes>1) # number of multi-seq (>1) clone
     n_seq_in_clone = sum(clone_sizes[clone_sizes>1]) # number of sequences belonging to a clone
-    summary$p_value[summary$convergent_clone_id %in% ss_clone] = 1
+    # summary$p_value[summary$convergent_clone_id %in% ss_clone] = 1
     n_simulated = sum(convergent_clone[AUC_VAR]) # number of simulated sequences left
     ######################################################################
     
-    auc_thresholds <- auc_thresholds <- sort(unique(summary$p_value))
+    auc_thresholds <- sort(unique(summary$p_value))
     
     # auc_thresholds[1] <- auc_thresholds[1] - 1e-8
     # auc_thresholds[101] <- auc_thresholds[101] + 1e-8
