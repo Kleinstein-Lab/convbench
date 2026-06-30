@@ -24,7 +24,7 @@ process CDR3_SIMILARITY{
     -md $airr \
     -o . \
     -da ${params.da_variable} \
-    -dg "condition" \
+    -dg ${params.disease_gp} \
     -t 0.15 \
     -l "single" \
     -a ${params.auc_variable} \

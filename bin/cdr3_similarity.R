@@ -295,6 +295,64 @@ make_fisher_overview_plot <- function(fisher_table, df_hier_clones, level, condi
   
 }
 
+do_wilcox_test <- function(results_df, da_variable, disease_group, cluster_col){
+  # perform Wilcoxon test on each cluster comparing counts in each group normalized
+  # by subject depth.
+  # results_df should contain information about the cluster ID (cluster_col), da_variable,
+  # and subject IDs
+
+  # Subject sequencing depths
+  subject_depths <- results_df %>%
+    dplyr::group_by(subject_id, !!sym(da_variable)) %>%
+    dplyr::summarize(subj_depth = n())
+
+  # Cluster frequencies per subject
+  cluster_subject_freqs <- results_df %>%
+    dplyr::group_by(!!sym(cluster_col), subject_id) %>%
+    dplyr::summarize(cluster_sequences = n()) %>%
+    dplyr::left_join(subject_depths, by = 'subject_id') %>%
+    dplyr::mutate(normalized_freq = cluster_sequences / subj_depth) %>%
+    tidyr::pivot_wider(id_cols = cluster_col, 
+                      names_from = 'subject_id', 
+                      values_from = 'normalized_freq', 
+                      values_fill = 0) %>%
+    as.data.frame(check.names = F)
+
+  write.table(cluster_subject_freqs, 
+              file.path(OUTPUT_DIR, 'tables', 'cluster_subject_freqs.tsv'), 
+              sep = '\t', row.names = F, quote = F)
+
+  row.names(cluster_subject_freqs) <- as.character(cluster_subject_freqs[[cluster_col]])
+  cluster_subject_freqs <- cluster_subject_freqs %>%
+                              dplyr::select(-!!sym(cluster_col))
+
+  ctrl <- subject_depths %>%
+            dplyr::filter(!!sym(da_variable) != disease_group) %>%
+            dplyr::pull(subject_id)
+
+  dis <- subject_depths %>%
+            dplyr::filter(!!sym(da_variable) == disease_group) %>%
+            dplyr::pull(subject_id)
+
+  wilcox_res_list <- lapply(row.names(cluster_subject_freqs), function(clust){
+    x <- as.numeric(cluster_subject_freqs[clust,ctrl])
+    y <- as.numeric(cluster_subject_freqs[clust,dis])
+    p_val <- wilcox.test(x, y, exact = FALSE)$p.value
+    return(data.frame(convergent_clone_id = clust,
+                      p_value = p_val))
+  })
+
+  wilcox_result <- do.call(rbind, wilcox_res_list)
+  wilcox_result$p_adj <- p.adjust(wilcox_result$p_value, method = 'BH')
+
+  write.table(wilcox_result, 
+              file.path(OUTPUT_DIR, 'tables', 'wilcox_res.tsv'), 
+              sep = '\t', row.names = F, quote = F)
+
+  return(wilcox_result)          
+}
+
+
 make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq_col, auc_variable){
 
   ggplot(purity_data, aes(x = !!sym(cluster_id_col), y = !!sym(pct_hit_col))) +
@@ -695,8 +753,8 @@ colnames(sum2) <- c('convergent_clone_id', 'p_value_fisher', 'odds_ratio_fisher'
 
 sum <- dplyr::left_join(sum1, sum2, by = 'convergent_clone_id')
 
-write.table(sum, file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"), 
-            sep="\t", quote = F, row.names = F)
+# write.table(sum, file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"), 
+#             sep="\t", quote = F, row.names = F)
 
 # get ending time after getting clusters & Fisher Test and making basic figures/tables
 end_time <- Sys.time()
@@ -706,8 +764,6 @@ time_taken <- end_time - start_time
 ### WILCOXON TEST ###
 #####################
 
-# TODO: turn below code into a function to make it easier to transport to Milo
-
 # information required: 
 # depth per person
 # number of sequences from each person in each cluster
@@ -716,53 +772,8 @@ time_taken <- end_time - start_time
 # then do Wilcox test disease vs. control for each --> use apply loop
 
 message('Completing Wilcoxon DA tests...')
-# Subject sequencing depths
-subject_depths <- convergent_clones %>%
-  dplyr::group_by(subject_id, status) %>%
-  dplyr::summarize(subj_depth = n())
 
-# Cluster frequencies per subject
-cluster_subject_freqs <- convergent_clones %>%
-  dplyr::group_by(convergent_clone_id, subject_id) %>%
-  dplyr::summarize(cluster_sequences = n()) %>%
-  dplyr::left_join(subject_depths, by = 'subject_id') %>%
-  dplyr::mutate(normalized_freq = cluster_sequences / subj_depth) %>%
-  tidyr::pivot_wider(id_cols = 'convergent_clone_id', 
-                     names_from = 'subject_id', 
-                     values_from = 'normalized_freq', 
-                     values_fill = 0) %>%
-  as.data.frame(check.names = F)
-
-write.table(cluster_subject_freqs, 
-            file.path(OUTPUT_DIR, 'tables', 'cluster_subject_freqs.tsv'), 
-            sep = '\t', row.names = F, quote = F)
-
-row.names(cluster_subject_freqs) <- as.character(cluster_subject_freqs$convergent_clone_id)
-cluster_subject_freqs <- cluster_subject_freqs %>%
-                            dplyr::select(-convergent_clone_id)
-
-ctrl <- subject_depths %>%
-          dplyr::filter(!!sym(DA_VAR) != DISEASE_GP) %>%
-          dplyr::pull(subject_id)
-
-dis <- subject_depths %>%
-          dplyr::filter(!!sym(DA_VAR) == DISEASE_GP) %>%
-          dplyr::pull(subject_id)
-
-wilcox_res_list <- lapply(row.names(cluster_subject_freqs), function(clust){
-  x <- as.numeric(cluster_subject_freqs[clust,ctrl])
-  y <- as.numeric(cluster_subject_freqs[clust,dis])
-  p_val <- wilcox.test(x, y, exact = FALSE)$p.value
-  return(data.frame(convergent_clone_id = clust,
-                    p_value = p_val))
-})
-
-wilcox_res <- do.call(rbind, wilcox_res_list)
-wilcox_res$p_adj <- p.adjust(wilcox_res$p_value, method = 'BH')
-
-write.table(wilcox_res, 
-            file.path(OUTPUT_DIR, 'tables', 'wilcox_res.tsv'), 
-            sep = '\t', row.names = F, quote = F)
+wilcox_res <- do_wilcox_test(convergent_clones, DA_VAR, DISEASE_GP, 'convergent_clone_id')
 
 wilcox_sum <- wilcox_res
 colnames(wilcox_sum) <- c('convergent_clone_id', 'p_value_wilcox', 'fdr_wilcox')
@@ -809,10 +820,10 @@ stat_table <- data.frame('tool' = c('CDR3 Similarity + Fisher', 'CDR3 Similarity
 if (AUC_VAR != FALSE){
   message('Making AUC curves...')
   # do AUC curve with the Fisher Exact results
-  fisher_auc <- make_auc_curve(fisher_table, convergent_clones, 'p_value', 'convergent_clone_id', 'simulated', 'Fisher')
+  fisher_auc <- make_auc_curve(fisher_table, convergent_clones, 'p_value', 'convergent_clone_id', AUC_VAR, 'Fisher')
 
   # do AUC curve with the Wilcoxon results
-  wilcox_auc <- make_auc_curve(wilcox_res, convergent_clones, 'p_value', 'convergent_clone_id', 'simulated', 'Wilcoxon')
+  wilcox_auc <- make_auc_curve(wilcox_res, convergent_clones, 'p_value', 'convergent_clone_id', AUC_VAR, 'Wilcoxon')
   
   stat_table[1, 'AUC'] <- c(fisher_auc)
   stat_table[2, 'AUC'] <- c(wilcox_auc)

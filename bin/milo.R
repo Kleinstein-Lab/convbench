@@ -25,6 +25,278 @@ set.seed(37)
 ### HELPER FUNCTIONS ###
 ########################
 
+### Copied from Mal-ID helper functions ###
+# write a function to perform the Fisher Exact Test for a specific cluster based on SUBJECTS in cluster
+fisher_test_cluster <- function(df, subj_summary, input_convergent_clone_id, condition, condition_col = 'status', clone_id_col = 'convergent_clone_id', count_col = 'subject_id'){
+  # df: input dataframe only containing clusters relevant for Fisher test set
+  # (i.e. with 2 or more subjects in condition of interest)
+  # subj_summary: summary of all subjects and statuses made BEFORE filtering to df
+  # input_convergent_clone_id: clone we are performing Fisher test on
+  # condition: condition we are testing for enrichment
+  # count_col: the count column, i.e. which column are we getting our counts from? Could be subject_id, sequence_id
+  
+  # first, get all the subjects or sequences in a cluster
+  in_cluster <- df %>%
+    dplyr::filter(!!sym(clone_id_col) == input_convergent_clone_id) %>%
+    dplyr::pull(count_col) %>%
+    unique()
+  
+  # establish healthy and diseased groups in the entire test_smaller1 group
+  # using subj summary
+  subj_cond <- subj_summary %>% 
+    dplyr::filter(!!sym(condition_col) == condition) %>% 
+    dplyr::pull(count_col) %>%
+    unique()
+  
+  tot_cond <- length(subj_cond)
+  
+  subj_not_cond <- subj_summary %>% 
+    dplyr::filter(!!sym(condition_col) != condition) %>% 
+    dplyr::pull(count_col) %>%
+    unique()
+  
+  tot_not_cond <- length(subj_not_cond)
+  
+  # count those in cluster with condition
+  in_cluster_cond <- length(intersect(in_cluster, subj_cond))
+  
+  # count those in cluster without condition
+  in_cluster_not_cond <- length(intersect(in_cluster, subj_not_cond))
+  
+  # count those NOT in cluster with condition
+  not_in_cluster_cond <- tot_cond - in_cluster_cond
+  
+  # count those NOT in cluster without condition
+  not_in_cluster_not_cond <- tot_not_cond - in_cluster_not_cond
+  
+  # do not do the test if only one
+  # should not be the case anyway because we pre-filtered
+  # NOTE: changed to if 0 here - not possible, but if it happens there has been some mistake
+  if (length(in_cluster) < 1){
+    return(list(fisher_test_result = NA, 
+                subjects_in_cluster = length(in_cluster),
+                in_cluster_in_condition = in_cluster_cond,
+                in_cluster_not_in_condition = in_cluster_not_cond))
+  } else{
+    
+    # build contingency table to test for a CONDITON cluster
+    #
+    #                  cluster
+    #                No    Yes
+    #               ___________
+    #            No|     |     |
+    # condition    |_____|_____|
+    #           Yes|     |     |
+    #              |_____|_____|
+    
+    contingency_table <- matrix(c(not_in_cluster_not_cond, not_in_cluster_cond, in_cluster_not_cond, in_cluster_cond), 2, 2)
+    
+    # do fisher test
+    return(list(fisher_test_result = fisher.test(contingency_table, alternative="greater"), 
+                num_in_cluster = length(in_cluster),
+                in_cluster_in_condition = in_cluster_cond,
+                in_cluster_not_in_condition = in_cluster_not_cond,
+                not_in_cluster_cond = not_in_cluster_cond,
+                not_in_cluster_not_cond = not_in_cluster_not_cond,
+                tot_cond = tot_cond,
+                tot_not_cond = tot_not_cond))
+  }
+  
+}
+
+get_fisher_exact_table <- function(hier_clone_df, condition, condition_col = 'status', clone_id_col = 'convergent_clone_id', count_col = 'subject_id', filter = TRUE){
+  # go from a hierarchical clones output dataframe
+  # then get the clones worth doing fisher's exact on
+  # do the fisher's exact test on every clone to test for healthy or diseased patients
+  # depending on condition
+  # count col establishes whether fisher testing is done at subject or sequence level
+  
+  if (filter){
+    cat(paste0("Getting clones with at least 2 unique ", count_col, " in ", condition, " group..."), end="\n")
+    # get the convergent clones with at least 2 subjects in the disease and/or 
+    # 2 subjects in the healthy group
+    convergent_clones_testable <- filter_hier_clones(hier_clone_df, condition, condition_col, clone_id_col, count_col)
+    cat(paste0(length(convergent_clones_testable), " clones found passing filtering conditions for ", condition, " group."), end="\n")
+  } else{
+    
+    convergent_clones_testable <- unique(hier_clone_df[[clone_id_col]])
+    cat(paste0(length(convergent_clones_testable), " clones will be tested for ", condition, " group."), end="\n")
+    
+  }
+  
+  
+  cat("Preparing data for Fisher's Exact test...", end="\n")
+  
+  # get the total subject information summarized BEFORE filtering
+  # in case subjects will get lost
+  subj_summary <- hier_clone_df %>%
+    dplyr::select(!!sym(count_col), !!sym(condition_col)) %>%
+    distinct() 
+  
+  # reduce the table to prepare for fisher and do tests faster
+  hier_clone_df_fisher <- hier_clone_df %>%
+    dplyr::filter(!!sym(clone_id_col) %in% convergent_clones_testable)
+  
+  cat("Completing Fisher's Exact tests...", end="\n")
+  # do all the fisher tests
+  fisher_results_all <- lapply(convergent_clones_testable, function(clone_id){
+    
+    # do test
+    fisher_results <- fisher_test_cluster(hier_clone_df_fisher, subj_summary, clone_id, condition, condition_col, clone_id_col, count_col)
+
+    results_df <- data.frame(convergent_clone_id = clone_id,
+                             cluster_type = condition,
+                             count_column = count_col,
+                             p_value = NA,
+                             odds_ratio = NA,
+                             num_in_cluster = fisher_results[['num_in_cluster']],
+                             in_cluster_in_condition = fisher_results[['in_cluster_in_condition']],
+                             in_cluster_not_in_condition = fisher_results[['in_cluster_not_in_condition']],
+                             not_in_cluster_in_condition = fisher_results[['not_in_cluster_cond']],
+                             not_in_cluster_not_in_condition = fisher_results[['not_in_cluster_not_cond']],
+                             total_in_condition = fisher_results[['tot_cond']],
+                             total_not_in_condition = fisher_results[['tot_not_cond']])
+    
+    # check for NA (not enough info) but should be filtered out
+    
+    # if (fisher_results$num_in_cluster > 1){
+      
+    # pull out the fisher test results looking for a disease and a healthy cluster
+    fisher <- fisher_results$fisher_test_result
+    
+    results_df$p_value <- fisher$p.value
+    
+    results_df$odds_ratio <- fisher$estimate
+      
+    # }
+    
+    return(results_df)
+    
+  })
+  
+  fisher_results_all <- do.call(rbind, fisher_results_all)
+  fisher_results_all$fdr <- p.adjust(fisher_results_all$p_value, method="fdr")
+  
+  return(fisher_results_all)
+}
+
+get_combined_fisher_exact_table <- function(hier_clone_df, condition_set, condition_col = 'status', clone_id_col = 'convergent_clone_id', count_col = 'subject_id', filter = TRUE){
+  # hier_clone_df: hierarchical clones df
+  # condition set: character vector containing all conditions to be tested
+  
+  condition_fisher_dfs <- lapply(condition_set, function(condition){
+    
+    get_fisher_exact_table(hier_clone_df, condition, condition_col, clone_id_col, count_col, filter)
+    
+  })
+  
+  fisher_results_all_cond <- do.call(rbind, condition_fisher_dfs)
+  
+  fisher_results_all_cond$convergent_clone_id <- as.character(fisher_results_all_cond$convergent_clone_id)
+  
+  return(fisher_results_all_cond)
+  
+}
+
+summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count_col, alpha, var_of_interest){
+  # get a table with info about the significant results coming from the fisher exact test table
+  
+  subj_info <- df_hier_clones %>%
+    dplyr::group_by(!!sym(clone_id_col), !!sym(count_col)) %>%
+    dplyr::summarise(count_per_cluster = n())
+  
+  if (var_of_interest == F){
+    hit_info <- df_hier_clones %>%
+      dplyr::group_by(!!sym(clone_id_col)) %>%
+      dplyr::summarise(hit_seqs = NA)
+  } else{
+    hit_info <- df_hier_clones %>%
+      dplyr::group_by(!!sym(clone_id_col)) %>%
+      dplyr::summarise(hit_seqs = sum(!!sym(var_of_interest) == TRUE))
+  }
+  
+  cluster_cts <- df_hier_clones %>%
+    dplyr::group_by(!!sym(clone_id_col)) %>%
+    dplyr::summarise(total_cluster_seqs = n())
+  
+  all_df <- cluster_cts %>%
+    dplyr::left_join(subj_info, by = clone_id_col) %>%
+    dplyr::mutate(pct_per_cluster = count_per_cluster / total_cluster_seqs) %>%
+    dplyr::left_join(hit_info, by = clone_id_col) %>%
+    dplyr::mutate(pct_hits = hit_seqs / total_cluster_seqs) %>%
+    dplyr::right_join(fisher_table, by = clone_id_col, relationship = "many-to-many")
+  
+  return(all_df)
+  
+}
+
+make_significant_cluster_plot <- function(fisher_res, df_hier_clones, level, alpha, clone_id_col, fill_var){
+  # for each type of cluster, shows the number of subjects from each study
+  # in the cluster 
+  
+  # get sig clusters
+  md_sig <- fisher_res %>%
+    dplyr::filter(p_value <= alpha) %>%
+    dplyr::left_join(df_hier_clones, by = clone_id_col)
+  
+  # adjust for level - sequence or subject IDs
+  md_sig <- md_sig %>%
+    dplyr::select(all_of(c(level, clone_id_col, fill_var, clone_id_col, 'cluster_type'))) %>%
+    distinct()
+  
+  p <- md_sig %>%
+    ggplot(aes(x=!!sym(clone_id_col), fill=!!sym(fill_var))) +
+    geom_bar(stat="count", 
+             width=0.85) +
+    labs(x="Convergent Clone ID") +
+    theme_bw() +
+    scale_fill_brewer(palette = "Dark2") +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+    geom_text(aes(label = after_stat(count)), 
+              stat = "count", 
+              position = position_stack(vjust = 0.5),
+              color="gray16")
+  
+  if(n_distinct(md_sig$cluster_type) > 1){
+    p + facet_wrap(vars(cluster_type), scales="free") 
+  } else{
+    p
+  }
+  
+}
+
+make_fisher_overview_plot <- function(fisher_table, df_hier_clones, level, condition, current_fold, alpha, clone_id_col, max_x=6){
+  # level is the level at which fisher tests were done - i.e. "subject" or "sequence"
+  
+  # get seqs per cluster
+  seq_count_df <- df_hier_clones %>%
+    dplyr::group_by(!!sym(clone_id_col)) %>%
+    summarise(seq_count = n())
+  
+  # add seqs per cluster to fisher exact table
+  df_plot <- fisher_table %>%
+    dplyr::filter(cluster_type == condition) %>%
+    dplyr::filter(p_value <= alpha) %>%
+    dplyr::left_join(seq_count_df, by=clone_id_col) %>%
+    dplyr::mutate(log2_odds_ratio = log2(odds_ratio))
+  
+  # assign a value to the infinite or clusters
+  df_plot$log2_odds_ratio[is.infinite(df_plot$log2_odds_ratio)] <- max_x
+  
+  df_plot %>%
+    ggplot(aes(x=log2_odds_ratio, y=in_cluster_in_condition, color=p_value)) +
+    geom_point(aes(size=seq_count), stroke=1, alpha = 0.6) +
+    scale_color_gradient(low = "red4", high = "white") +
+    geom_label_repel(label=df_plot[[clone_id_col]], size = 2, nudge_y = 0.4, nudge_x = 0.2, color="gray6") +
+    geom_vline(xintercept = max_x-1, linetype = "dashed") +
+    labs(x=paste0(condition, " odds ratio (log2)"),
+         y=paste0("Number of ", condition, " ", level, "s per cluster"),
+         size = "# sequences per cluster",
+         color = paste0("p-value"),
+         title=paste0("Convergent clusters for ", condition, " group (p<",alpha, "), ", current_fold))
+  
+}
+
 make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq_col, auc_variable){
 
   ggplot(purity_data, aes(x = !!sym(cluster_id_col), y = !!sym(pct_hit_col))) +
@@ -50,6 +322,79 @@ make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq
   ggsave(file.path(OUTPUT_DIR, 'figures', 'cluster_purity.png'), 
          device="png", width=10, height=5, units="in")
 
+}
+
+make_auc_curve <- function(results_table, seq_table, p_val_col, cluster_id_col, seq_id_col, auc_variable, name){
+  # results table = table containing some kind of test result (Fisher Exact, Wilcox, etc.)
+  # seq_table = table containing sequence-level information including auc_variable and cluster_id_col
+  #             used to identify the correct category for each sequence
+  # p_val_col = the column you want to use for p values to make AUC thresholds
+  # cluster_id_col = IDs specifying clusters that were tested
+  # auc_variable = variable to use for getting positives in the AUC curve
+  # name = a name to specify for saving figures and tables (i.e. the name of the test)
+  
+  # for Milo, eliminate unclustered seqs
+  invalid_cells <- sum(is.na(results_table[[p_val_col]]))
+  total_cells <- nrow(min_p_nhoods_df)
+  valid_cells <- total_cells - invalid_cells
+  
+  # change the sequences with no nhood to a min p of 1
+  results_table[is.na(results_table[[p_val_col]]), p_val_col] <- 1
+  
+  # add AUC var info
+  results_table <- results_table %>%
+    dplyr::inner_join(seq_table, by = seq_id_col)
+
+  auc_thresholds <- sort(unique(results_table[[p_val_col]]))
+  
+  # add to the largest to make sure the entire curve is captured
+  tot_thresh <- length(auc_thresholds)
+  auc_thresholds[tot_thresh] <- auc_thresholds[tot_thresh] + 1e-3
+  
+  auc_data <- lapply(auc_thresholds, function(thresh){
+    
+    # get cells with min nhood p below threshold
+    da.cell.list <- results_table[[p_val_col]] < thresh
+    
+    true_pos <- sum(da.cell.list == T & results_table[[auc_variable]] == T)
+    false_neg <- sum(da.cell.list == F & results_table[[auc_variable]] == T)
+    true_neg <- sum(da.cell.list == F & results_table[[auc_variable]] == F)
+    false_pos <- sum(da.cell.list == T & results_table[[auc_variable]] == F)
+    
+    TPR <- true_pos / (true_pos + false_neg)
+    FPR <- 1 - (true_neg / (true_neg + false_pos))
+    
+    return(data.frame('TPR' = TPR,
+                      'FPR' = FPR))
+    
+  })
+  
+  auc_df <- do.call(rbind, auc_data)
+  auc_df[[p_val_col]] <- auc_thresholds
+  
+  write.table(auc_df, 
+              file.path(OUTPUT_DIR, 'tables', paste0('auc_curve_vals_', name, '.tsv')), 
+              sep = '\t', row.names = F, quote = F)
+  
+  # get auroc
+  auroc <- pracma::trapz(auc_df$FPR, auc_df$TPR)
+  
+  auc_df %>%
+    ggplot(aes(x = FPR, y = TPR)) +
+    geom_point() +
+    geom_line() +
+    labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
+         subtitle = paste0('AUC: ', round(auroc, 3), '; ', 
+                           prettyNum(sum(valid_cells), big.mark = ",", scientific = FALSE), '/', 
+                           prettyNum(total_cells, big.mark = ",", scientific = FALSE), ' cells in DA neighborhoods')) + 
+    theme_minimal()
+  
+  ggsave(file.path(OUTPUT_DIR, 'figures', paste0('AUC_curve_', name, '.png')),
+         device = 'png',
+         width = 7,
+         height = 6)
+
+  return(auroc)
 }
 
 ########################
@@ -324,10 +669,12 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'milo.RDS')) | OVERWRITE == T){
   # the embedding value PCs
   # run PCA if enough data
   if (nrow(data) >= 200){
+    message('Using first 200 PCs to generate UMAP...')
     pca <- prcomp(data_input, center = T, scale. = T)
     reducedDim(sce, 'PCA') <- pca$x[, 1:200] # use 200 PCs
     sce <- runUMAP(sce, dimred = 'PCA', n_neighbors = K_VAL)
   } else{
+    message('Generating UMAP from all data...')
     sce <- runUMAP(sce, exprs_values = "counts", n_neighbors = K_VAL)
   }
 
@@ -963,7 +1310,13 @@ make_UMAP_viz <- function(var, var_name, custom_pal = NULL){
   }
 }
 
-if (VDJ){
+if (nrow(umap_coords) >= 400000){
+  message('Skipping UMAP visualization because dataset too large.')
+} else{
+  message('Making UMAP visualizations...')
+}
+
+if (VDJ && nrow(umap_coords) < 400000){
   
   if(!('v_gene' %in% colnames(md) & 'j_gene' %in% colnames(md))) warning('v_gene and j_gene columns not provided. UMAP plots for V and J gene will not be generated.')
   
@@ -1056,7 +1409,7 @@ if (VDJ){
 }
 
 # include info if simulated
-if (AUC_VAR != FALSE){
+if (AUC_VAR != FALSE && nrow(umap_coords) < 400000){
   
   message('Visualize hit sequences.')
   
@@ -1064,11 +1417,13 @@ if (AUC_VAR != FALSE){
   
 }
 
-message('Visualize subject and sample information.')
+if (nrow(umap_coords) < 400000){
+  message('Visualize subject and sample information.')
 
-make_UMAP_viz(DA_VAR, DA_VAR)
-make_UMAP_viz('sample_id', 'Sample ID')
-make_UMAP_viz('subject_id', 'Subject ID')
+  make_UMAP_viz(DA_VAR, DA_VAR)
+  make_UMAP_viz('sample_id', 'Sample ID')
+  make_UMAP_viz('subject_id', 'Subject ID')
+}
 
 # make viz for all cells in neighborhoods significant at alpha 0.05
 sig_nhoods <- da_results %>%
@@ -1083,9 +1438,10 @@ sig_nhood_cell_ids <- row.names(sig_nhood_cells[sig_nhood_idx,])
 umap_coords <- umap_coords %>%
   dplyr::mutate(da_cell = if_else(id_col %in% sig_nhood_cell_ids, TRUE, FALSE))
 
-message('Visualize significant neighborhoods.')
-
-make_UMAP_viz('da_cell', 'in significant neighborhood \n (spatial FDR < 0.05)', custom_pal = c('TRUE' = "red", 'FALSE' = "gray"))
+if (nrow(umap_coords) < 400000){
+  message('Visualize significant neighborhoods.')
+  make_UMAP_viz('da_cell', 'in significant neighborhood \n (spatial FDR < 0.05)', custom_pal = c('TRUE' = "red", 'FALSE' = "gray"))
+}
 
 message(paste0('Ending run: ', Sys.time()))
 

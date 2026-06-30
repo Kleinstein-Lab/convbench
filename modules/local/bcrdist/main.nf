@@ -9,13 +9,15 @@ process BCRDIST{
 
     output:
     path "tables/run_stats.tsv", emit: run_stats
-    path "tables/auc_curve_vals.tsv", emit: auc_vals, optional: true
+    path "tables/auc_curve_vals_*.tsv", emit: auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
     path "tables/bcrdist_clusters.tsv", emit: bcrdist_clusters
+    path "tables/cluster_subject_freqs.tsv", emit: cluster_subject_freqs
     path "tables/cluster_summary.tsv", emit: cluster_summary, optional: true
     path "tables/seq_summary.tsv", emit: seq_summary
-    path "tables/fisher_summary.tsv", emit: fisher_summary
+    path "tables/cluster_subj_summary.tsv", emit: cluster_subj_summary
     path "tables/fisher_table.tsv", emit: fisher_table
+    path "tables/wilcox_res.tsv", emit: wilcox_res
     path "figures/*.png", emit: figs
 
     script:
@@ -27,8 +29,8 @@ process BCRDIST{
     -he "bin/tcrdist3.py" \
     -md $airr \
     -o . \
-    -da "status" \
-    -dg "condition" \
+    -da ${params.da_variable} \
+    -dg ${params.disease_gp} \
     -t 60 \
     -a ${params.auc_variable} \
     -py "/opt/conda/envs/bcrdist/bin/python" \

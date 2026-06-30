@@ -27,7 +27,7 @@ process DASEQ{
     -md $airr \
     -o . \
     -da ${params.da_variable} \
-    -dg "condition" \
+    -dg ${params.disease_gp} \
     -m ${params.daseq_min_k} \
     -t ${params.daseq_step_k} \
     -x ${params.daseq_max_k} \

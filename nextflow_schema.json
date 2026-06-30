@@ -21,6 +21,11 @@
                     "default": "status",
                     "description": "Variable to use for differential abundance testing. There should be two levels in this factor/categorical variable."
                 },
+                "disease_gp": {
+                    "type": "string",
+                    "default": "condition",
+                    "description": "The label for samples or individuals in the disease/condition category."
+                },
                 "auc_variable": {
                     "type": "string",
                     "default": "simulated",

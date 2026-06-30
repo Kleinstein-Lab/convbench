@@ -718,9 +718,11 @@ message('Data loaded and prepped for DAseq. Generating PCA & UMAP...')
 if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'UMAP_embeddings.rds')) | OVERWRITE == T){
   
   if (nrow(data) >= 200){
+    message('Using first 200 PCs to generate UMAP...')
     pca <- prcomp(data, center = T, scale. = T)
     umap_embeddings <- uwot::umap(pca$x[, 1:200]) # use 200 PCs
   } else{
+    message('Generating UMAP from all data...')
     umap_embeddings <- uwot::umap(data)
   }
   
@@ -737,7 +739,24 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'UMAP_embeddings.rds')) | OVERW
 ################
 
 Sys.time()
-message('UMAP embeddings generated. Making visualizations...')
+
+# prep UMAP data for vizualization
+umap_embeddings_coords <- data.frame(umap_embeddings)
+colnames(umap_embeddings_coords) <- c('UMAP1', 'UMAP2')
+row.names(umap_embeddings_coords) <- row.names(data)
+umap_embeddings_coords$id_col <- row.names(umap_embeddings_coords)
+umap_embeddings_coords$sample_id <- X.cells$sample_id
+umap_embeddings_coords$subject_id <- X.cells$subject_id
+
+# add label information
+umap_embeddings_coords <- umap_embeddings_coords %>%
+  dplyr::left_join(X.label.info, by=join_by(sample_id == label))
+
+if (nrow(umap_embeddings_coords) >= 400000){
+  message('Skipping UMAP visualization because dataset too large.')
+} else{
+  message('UMAP embeddings generated. Making visualizations...')
+}
 
 make_umap_viz <- function(var, var_name, custom_pal = NULL){
   
@@ -788,20 +807,8 @@ make_umap_viz <- function(var, var_name, custom_pal = NULL){
   }
 }
 
-# prep UMAP data for vizualization
-umap_embeddings_coords <- data.frame(umap_embeddings)
-colnames(umap_embeddings_coords) <- c('UMAP1', 'UMAP2')
-row.names(umap_embeddings_coords) <- row.names(data)
-umap_embeddings_coords$id_col <- row.names(umap_embeddings_coords)
-umap_embeddings_coords$sample_id <- X.cells$sample_id
-umap_embeddings_coords$subject_id <- X.cells$subject_id
-
-# add label information
-umap_embeddings_coords <- umap_embeddings_coords %>%
-  dplyr::left_join(X.label.info, by=join_by(sample_id == label))
-
 # add other metadata for plotting
-if (VDJ){
+if (VDJ && nrow(umap_embeddings_coords) < 400000){
   
   if(!('v_gene' %in% colnames(md) & 'j_gene' %in% colnames(md))) warning('v_gene and j_gene columns not provided. UMAP plots for V and J gene will not be generated.')
   
@@ -871,16 +878,18 @@ if (VDJ){
 }
 
 # include info if simulated
-if (AUC_VAR != FALSE){
+if (AUC_VAR != FALSE && nrow(umap_embeddings_coords) < 400000){
   umap_embeddings_coords <- umap_embeddings_coords %>%
     dplyr::left_join(md[c('id_col', AUC_VAR)], by = 'id_col')
   
   make_umap_viz(AUC_VAR, 'Hits', custom_pal = c('TRUE' = "red", 'FALSE' = "gray"))
 }
 
-make_umap_viz('condition', DA_VAR)
-make_umap_viz('sample_id', 'Sample ID')
-make_umap_viz('subject_id', 'Subject ID')
+if (nrow(umap_embeddings_coords) < 400000){
+  make_umap_viz('condition', DA_VAR)
+  make_umap_viz('sample_id', 'Sample ID')
+  make_umap_viz('subject_id', 'Subject ID')
+}
 
 # matrix version for downstream steps
 X.embed <- as.matrix(umap_embeddings_coords %>% dplyr::select(c('UMAP1', 'UMAP2')))
