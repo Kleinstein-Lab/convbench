@@ -611,12 +611,21 @@ md <- md %>%
 # make sure the rows are the same in the data and metadata
 md <- data.frame(md, check.names = F)
 
+# add gene, allele info
 if (!'v_gene' %in% colnames(md)){
-  # assume if v_gene not included, J probably isn't either
   md$v_gene <- alakazam::getGene(md$v_call, strip_d = F, omit_nl = F)
+}
+
+if (!'v_allele' %in% colnames(md)){
   md$v_allele <- alakazam::getAllele(md$v_call, strip_d = F, omit_nl = F)
+}
+
+if (!'j_gene' %in% colnames(md)){
   md$j_gene <- alakazam::getGene(md$j_call, strip_d = F, omit_nl = F)
-  
+}
+
+if (!'j_allele' %in% colnames(md)){
+  md$j_allele <- alakazam::getAllele(md$j_call, strip_d = F, omit_nl = F)
 }
 
 reduced_md_cols <- c(DA_VAR, 'subject_id', 'sample_id', 'id_col')

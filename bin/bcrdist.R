@@ -802,19 +802,21 @@ if ('cell_id' %in% colnames(md)){
   
 }
 
+### Adding allele info to fit tcrdist input requirement ###
 if (!'v_gene' %in% colnames(md)){
-  # assume if v_gene not included, J probably isn't either
   md$v_gene <- alakazam::getGene(md$v_call, strip_d = F, omit_nl = F)
-  md$v_allele <- alakazam::getAllele(md$v_call, strip_d = F, omit_nl = F)
-  md$j_gene <- alakazam::getGene(md$j_call, strip_d = F, omit_nl = F)
-  md$j_allele <- alakazam::getAllele(md$j_call, strip_d = F, omit_nl = F)
 }
 
-### Adding allele info to fit tcrdist input requirement ###
 if (!'v_allele' %in% colnames(md)){
-  # assume if v_allele not included, J probably isn't either
   md$v_allele <- alakazam::getAllele(md$v_call, strip_d = F, omit_nl = F)
-  md$j_allele <- alakazam::getAllele(md$j_call, strip_d = F, omit_nl = F) 
+}
+
+if (!'j_gene' %in% colnames(md)){
+  md$j_gene <- alakazam::getGene(md$j_call, strip_d = F, omit_nl = F)
+}
+
+if (!'j_allele' %in% colnames(md)){
+  md$j_allele <- alakazam::getAllele(md$j_call, strip_d = F, omit_nl = F)
 }
 
 if (AUC_VAR != FALSE){
