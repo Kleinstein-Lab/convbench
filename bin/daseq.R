@@ -1163,10 +1163,10 @@ if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   # ALTERNATIVE AUC CALCUATION #
   ##############################
   # do AUC curve with the Fisher Exact results
-  fisher_auc <- make_auc_curve(X.cells, 'p_value_fisher', 'da.region.label', 'simulated', 'Fisher')
+  fisher_auc <- make_auc_curve(X.cells, 'p_value_fisher', 'da.region.label', AUC_VAR, 'Fisher')
 
   # do AUC curve with the Wilcoxon results
-  wilcox_auc <- make_auc_curve(X.cells, 'wilcox.adj.BH', 'da.region.label', 'simulated', 'Wilcoxon')
+  wilcox_auc <- make_auc_curve(X.cells, 'wilcox.adj.BH', 'da.region.label', AUC_VAR, 'Wilcoxon')
   
   stat_table[1, 'AUC'] <- c(wilcox_auc)
   stat_table[2, 'AUC'] <- c(fisher_auc)
