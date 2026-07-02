@@ -635,10 +635,16 @@ if (REMOVE_DUPS){
 }
 
 # not all of the seqs in the data will necessarily result in successful embeddings
+# and not all embeddings may be in md
 # so we can filter the metadata for only the relevant cell info
+common_cells <- intersect(md$id_col, data$id_col)
+
 md <- md %>%
-  dplyr::filter(id_col %in% data$id_col) %>%
+  dplyr::filter(id_col %in% common_cells) %>%
   as.data.frame()
+
+data <- data %>%
+  dplyr::filter(id_col %in% common_cells)
 
 row.names(md) <- md$id_col
 row.names(data) <- data$id_col
