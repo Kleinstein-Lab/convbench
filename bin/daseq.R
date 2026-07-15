@@ -437,14 +437,16 @@ make_auc_curve <- function(seq_table, p_val_col, cluster_id_col, auc_variable, n
   # get auroc
   p_auroc <- pracma::trapz(p_auc_df$FPR, p_auc_df$TPR)
   
+  pretty_name <- stringr::str_replace_all(name, '_', ' ')
+
   p_auc_df %>%
     ggplot(aes(x = FPR, y = TPR)) +
     geom_point() +
     geom_line() +
     labs(x = 'FPR',
          y = 'TPR',
-         title = paste0(name, ' threshold ', round(min(p_auc_thresholds)), ' to ', round(max(p_auc_thresholds), 3)),
-         subtitle = paste0(name, ' AUC: ', round(p_auroc, 3), '; ', 
+         title = paste0(pretty_name, ' threshold ', round(min(p_auc_thresholds)), ' to ', round(max(p_auc_thresholds), 3)),
+         subtitle = paste0(pretty_name, ' AUC: ', round(p_auroc, 3), '; ', 
                            prettyNum(assigned_cells, big.mark = ",", scientific = FALSE), '/', 
                            prettyNum(total_cells, big.mark = ",", scientific = FALSE), ' cells in DA clusters')) + 
     theme_minimal()
@@ -1259,7 +1261,7 @@ if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   wilcox_auc <- make_auc_curve(X.cells, 'wilcox.adj.BH', 'da.region.label', AUC_VAR, 'Wilcoxon')
   
   # also do AUC curve with the one-sided Wilcoxon results
-  wilcox_onesided_auc <- make_auc_curve(X.cells, 'fdr_wilcox_onesided', 'da.region.label', AUC_VAR, 'One-Sided Wilcoxon')
+  wilcox_onesided_auc <- make_auc_curve(X.cells, 'fdr_wilcox_onesided', 'da.region.label', AUC_VAR, 'One-Sided_Wilcoxon')
 
   stat_table[1, 'AUC'] <- c(wilcox_auc)
   stat_table[2, 'AUC'] <- c(fisher_auc)
