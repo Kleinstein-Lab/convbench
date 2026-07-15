@@ -304,6 +304,63 @@ make_fisher_overview_plot <- function(fisher_table, df_hier_clones, level, condi
   
 }
 
+do_wilcox_test <- function(results_df, da_variable, disease_group, cluster_col){
+  # perform Wilcoxon test on each cluster comparing counts in each group normalized
+  # by subject depth.
+  # results_df should contain information about the cluster ID (cluster_col), da_variable,
+  # and subject IDs
+
+  # Subject sequencing depths
+  subject_depths <- results_df %>%
+    dplyr::group_by(subject_id, !!sym(da_variable)) %>%
+    dplyr::summarize(subj_depth = n())
+
+  # Cluster frequencies per subject
+  cluster_subject_freqs <- results_df %>%
+    dplyr::group_by(!!sym(cluster_col), subject_id) %>%
+    dplyr::summarize(cluster_sequences = n()) %>%
+    dplyr::left_join(subject_depths, by = 'subject_id') %>%
+    dplyr::mutate(normalized_freq = cluster_sequences / subj_depth) %>%
+    tidyr::pivot_wider(id_cols = cluster_col, 
+                      names_from = 'subject_id', 
+                      values_from = 'normalized_freq', 
+                      values_fill = 0) %>%
+    as.data.frame(check.names = F)
+
+  write.table(cluster_subject_freqs, 
+              file.path(OUTPUT_DIR, 'tables', 'cluster_subject_freqs.tsv'), 
+              sep = '\t', row.names = F, quote = F)
+
+  row.names(cluster_subject_freqs) <- as.character(cluster_subject_freqs[[cluster_col]])
+  cluster_subject_freqs <- cluster_subject_freqs %>%
+                              dplyr::select(-!!sym(cluster_col))
+
+  ctrl <- subject_depths %>%
+            dplyr::filter(!!sym(da_variable) != disease_group) %>%
+            dplyr::pull(subject_id)
+
+  dis <- subject_depths %>%
+            dplyr::filter(!!sym(da_variable) == disease_group) %>%
+            dplyr::pull(subject_id)
+
+  wilcox_res_list <- lapply(row.names(cluster_subject_freqs), function(clust){
+    x <- as.numeric(cluster_subject_freqs[clust,ctrl])
+    y <- as.numeric(cluster_subject_freqs[clust,dis])
+    p_val <- wilcox.test(x, y, alternative = 'less', exact = FALSE)$p.value
+    return(data.frame(convergent_clone_id = clust,
+                      p_value = p_val))
+  })
+
+  wilcox_result <- do.call(rbind, wilcox_res_list)
+  wilcox_result$p_adj <- p.adjust(wilcox_result$p_value, method = 'BH')
+
+  write.table(wilcox_result, 
+              file.path(OUTPUT_DIR, 'tables', 'wilcox_res.tsv'), 
+              sep = '\t', row.names = F, quote = F)
+
+  return(wilcox_result)          
+}
+
 make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq_col, auc_variable){
 
   ggplot(purity_data, aes(x = !!sym(cluster_id_col), y = !!sym(pct_hit_col))) +
@@ -380,14 +437,16 @@ make_auc_curve <- function(seq_table, p_val_col, cluster_id_col, auc_variable, n
   # get auroc
   p_auroc <- pracma::trapz(p_auc_df$FPR, p_auc_df$TPR)
   
+  pretty_name <- stringr::str_replace_all(name, '_', ' ')
+
   p_auc_df %>%
     ggplot(aes(x = FPR, y = TPR)) +
     geom_point() +
     geom_line() +
     labs(x = 'FPR',
          y = 'TPR',
-         title = paste0(name, ' threshold ', round(min(p_auc_thresholds)), ' to ', round(max(p_auc_thresholds), 3)),
-         subtitle = paste0(name, ' AUC: ', round(p_auroc, 3), '; ', 
+         title = paste0(pretty_name, ' threshold ', round(min(p_auc_thresholds)), ' to ', round(max(p_auc_thresholds), 3)),
+         subtitle = paste0(pretty_name, ' AUC: ', round(p_auroc, 3), '; ', 
                            prettyNum(assigned_cells, big.mark = ",", scientific = FALSE), '/', 
                            prettyNum(total_cells, big.mark = ",", scientific = FALSE), ' cells in DA clusters')) + 
     theme_minimal()
@@ -1082,6 +1141,33 @@ colnames(fisher_sum) <- c('da.region.label', 'p_value_fisher', 'fdr_fisher')
 
 X.cells <- dplyr::left_join(X.cells, fisher_sum, by = 'da.region.label')
 
+#####################
+### WILCOXON TEST ###
+#####################
+
+# even though DA-Seq already has a Wilcoxon test, it is not one-sided
+# we will also add a one-sided test for our purposes.
+
+message('Completing one-sided Wilcoxon DA tests...')
+
+wilcox_res <- do_wilcox_test(X.cells %>% dplyr::filter(da.region.label != '0'), 
+                             DA_VAR, DISEASE_GP, 'da.region.label')
+
+wilcox_res %>%
+  ggplot(aes(x = p_value)) + 
+  geom_histogram(color = 'white', binwidth = 0.01) + 
+  theme_bw() +
+  labs(title = 'DA-Seq One-sided Wilcoxon P-Value Distribution') +
+  coord_cartesian(xlim = c(0, 1))
+
+ggsave(file.path(OUTPUT_DIR, 'figures', 'pvalue_hist_onesided_wilcox.png'),
+       device = 'png', width = 8, height = 6, units = 'in')
+
+wilcox_sum <- wilcox_res
+colnames(wilcox_sum) <- c('da.region.label', 'p_value_wilcox_onesided', 'fdr_wilcox_onesided')
+
+X.cells <- dplyr::left_join(X.cells, wilcox_sum, by = 'da.region.label')
+
 # cell-level info
 # restore ID column for writing
 names(X.cells)[names(X.cells) == 'id_col'] <- ID_COL_NAME
@@ -1093,7 +1179,7 @@ write.table(X.cells,
 names(X.cells)[names(X.cells) == ID_COL_NAME] <- 'id_col'
 
 # make a summary of stats
-stat_table <- data.frame('tool' = c('DAseq', 'DAseq + Fisher'),
+stat_table <- data.frame('tool' = c('DAseq', 'DAseq + Fisher', 'DAseq + One-sided Wilcoxon'),
                          'total_seqs' = nrow(X.cells),
                          'total_subj' = length(unique(X.cells$subject_id)),
                          'time (min)' = as.numeric(time_taken, units = "mins"),
@@ -1174,9 +1260,12 @@ if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   # do AUC curve with the Wilcoxon results
   wilcox_auc <- make_auc_curve(X.cells, 'wilcox.adj.BH', 'da.region.label', AUC_VAR, 'Wilcoxon')
   
+  # also do AUC curve with the one-sided Wilcoxon results
+  wilcox_onesided_auc <- make_auc_curve(X.cells, 'fdr_wilcox_onesided', 'da.region.label', AUC_VAR, 'One-Sided_Wilcoxon')
+
   stat_table[1, 'AUC'] <- c(wilcox_auc)
   stat_table[2, 'AUC'] <- c(fisher_auc)
-  
+  stat_table[3, 'AUC'] <- c(wilcox_onesided_auc)
   
   ###########
   # JACCARD #
@@ -1304,11 +1393,11 @@ if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   stat_table$avg_pct_hits <- mean(purity_stats$pct_hits)
   stat_table$tot_hits <- c(sum(X.cells[[AUC_VAR]], na.rm = T)) 
   stat_table$pct_hits <- c(mean(X.cells[[AUC_VAR]], na.rm = T) * 100)
-  stat_table$Jaccard_0.005 = c(jaccard_005, NA)
-  stat_table$Jaccard_0.05 = c(jaccard_05, NA)
-  stat_table$Jaccard_0.1 = c(jaccard_1, NA)
-  stat_table$Jaccard_max = c(Jaccard_max, NA)
-  stat_table$Jaccard_max_p = c(Jaccard_max_p, NA)
+  stat_table$Jaccard_0.005 = c(jaccard_005, NA, NA)
+  stat_table$Jaccard_0.05 = c(jaccard_05, NA, NA)
+  stat_table$Jaccard_0.1 = c(jaccard_1, NA, NA)
+  stat_table$Jaccard_max = c(Jaccard_max, NA, NA)
+  stat_table$Jaccard_max_p = c(Jaccard_max_p, NA, NA)
   
   stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
                              'num_hit_clusters', 'avg_pct_hits', 'AUC', 'Jaccard_0.005', 'Jaccard_0.05',

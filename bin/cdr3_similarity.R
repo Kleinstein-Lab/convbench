@@ -337,7 +337,7 @@ do_wilcox_test <- function(results_df, da_variable, disease_group, cluster_col){
   wilcox_res_list <- lapply(row.names(cluster_subject_freqs), function(clust){
     x <- as.numeric(cluster_subject_freqs[clust,ctrl])
     y <- as.numeric(cluster_subject_freqs[clust,dis])
-    p_val <- wilcox.test(x, y, exact = FALSE)$p.value
+    p_val <- wilcox.test(x, y, alternative = 'less', exact = FALSE)$p.value
     return(data.frame(convergent_clone_id = clust,
                       p_value = p_val))
   })
