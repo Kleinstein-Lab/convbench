@@ -496,6 +496,8 @@ parser$add_argument('-r', '--remove_dups', type = 'logical', default = FALSE,
 args <- parser$parse_args()
 
 MD_LOC <- args$metadata_loc
+MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_', 1)
+
 OUTPUT_DIR <- args$output_dir
 
 DA_VAR <- args$da_variable
@@ -793,7 +795,7 @@ colnames(wilcox_sum) <- c('convergent_clone_id', 'p_value_wilcox', 'fdr_wilcox')
 
 sum <- dplyr::left_join(sum, wilcox_sum, by = 'convergent_clone_id')
 
-write.table(sum, file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"), 
+write.table(sum, file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, "_seq_summary.tsv")), 
             sep="\t", quote = F, row.names = F)
 
 wilcox_res %>%

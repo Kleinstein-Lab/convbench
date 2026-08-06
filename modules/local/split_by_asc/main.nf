@@ -10,13 +10,13 @@ process SPLIT_BY_ASC{
 
     output:
     tuple val(meta),
-          path("ASCs/*")
+          path("*_md.tsv.gz"),
+          path("*_emb.tsv.gz")
 
     script:
     """
     split_by_asc.R \
     -a $asc_guide \
-    -l ${meta.id} \
     -d $embedding \
     -md $airr \
     -e TRUE

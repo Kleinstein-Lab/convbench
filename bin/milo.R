@@ -450,6 +450,7 @@ args <- parser$parse_args()
 # specify which dataset we are analyzing
 DATA_LOC <- args$data_loc
 MD_LOC <- args$metadata_loc
+MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_', 1)
 
 OUTPUT_DIR <- args$output_dir
 
@@ -896,7 +897,7 @@ if (!nhoods_match){
 
 
 # match each cell with the lowest p-value of all the neighborhoods it occupies
-if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'seq_results.tsv')) | OVERWRITE == T){
+if (!file.exists(file.path(OUTPUT_DIR, 'tables', paste(MD_NAME, '_seq_results.tsv'))) | OVERWRITE == T){
   min_p_nhoods <- lapply(row.names(milo@nhoods), function(current_seq){
     
     test <- milo@nhoods[current_seq,]*da_results$SpatialFDR
@@ -925,10 +926,10 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'seq_results.tsv')) | OVERWRITE
   min_p_nhoods_df <- do.call(rbind, min_p_nhoods)
   
   write.table(min_p_nhoods_df, 
-              file.path(OUTPUT_DIR, 'tables', 'seq_results.tsv'), 
+              file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, '_seq_results.tsv')), 
               sep = '\t', row.names = F, quote = F)
 } else{
-  min_p_nhoods_df <- read.csv(file.path(OUTPUT_DIR, 'tables', 'seq_results.tsv'), sep = '\t')
+  min_p_nhoods_df <- read.csv(file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, '_seq_results.tsv')), sep = '\t')
 }
 
 # get a continuous DA measure - copy of benchmark - sum of logFC of all neighborhoods
@@ -1440,9 +1441,14 @@ sig_nhoods <- da_results %>%
   dplyr::pull(nhood_id)
 
 sig_nhood_cells <- milo@nhoods[,as.character(sig_nhoods)]
-sig_nhood_idx <- rowSums(sig_nhood_cells) > 0
 
-sig_nhood_cell_ids <- row.names(sig_nhood_cells[sig_nhood_idx,])
+if(length(sig_nhoods) == 1){
+  sig_nhood_idx <- sig_nhood_cells > 0
+  sig_nhood_cell_ids <- names(sig_nhood_cells[sig_nhood_idx])
+} else{
+  sig_nhood_idx <- rowSums(sig_nhood_cells) > 0
+  sig_nhood_cell_ids <- row.names(sig_nhood_cells[sig_nhood_idx,])
+}
 
 umap_coords <- umap_coords %>%
   dplyr::mutate(da_cell = if_else(id_col %in% sig_nhood_cell_ids, TRUE, FALSE))

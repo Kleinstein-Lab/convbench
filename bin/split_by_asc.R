@@ -18,8 +18,8 @@ parser <- ArgumentParser(description = "Data location and Mal-ID algorithm hyper
 parser$add_argument('-a', '--asc_guide', type = 'character', default = 'asc_guide.tsv',
                     help = 'File path to a tab-separated file containing IMGT to ASC allele translations.')
 
-parser$add_argument('-l', '--label', type = 'character', default = 'COVID',
-                    help = 'Metadata label for a given AIRR/embedding pair.')
+# parser$add_argument('-l', '--label', type = 'character', default = 'COVID',
+#                     help = 'Metadata label for a given AIRR/embedding pair.')
 
 parser$add_argument('-d', '--data_loc', type = 'character', default = 'data',
                     help = 'File path for the embedding or RNA-Seq data location.')
@@ -37,11 +37,11 @@ ASC_GUIDE_LOC <- args$asc_guide
 MD_LOC <- args$metadata_loc
 DATA_LOC <- args$data_loc
 USE_EMB <- as.logical(args$use_embedding)
-META_LABEL <- args$label
+# META_LABEL <- args$label
 
-if (!dir.exists(file.path('ASCs'))){
-  dir.create(file.path('ASCs'))
-}
+# if (!dir.exists(file.path('ASCs'))){
+#   dir.create(file.path('ASCs'))
+# }
 
 ###################
 ### ASSIGN ASCs ###
@@ -133,10 +133,16 @@ message(paste0('Number of uncategorized sequences: ', sum(is.na(md$asc_group)), 
 ASCs <- unique(md$asc_group)
 
 # combine ASCs under 1,000 sequences
-small_ASCs <- table(md$asc_group)[table(md$asc_group) < 100] 
+message('Combining ASCs with under 1,000 sequences...')
+small_ASCs <- table(md$asc_group)[table(md$asc_group) < 200] 
 small_ASCs <- names(small_ASCs)
 
-md[md$asc_group %in% small_ASCs, 'asc_group'] <- 'small_ASC'
+# do not continue if it just makes one group
+if (length(small_ASCs) == 1){
+  stop('Execution halted: only 1 ASC is generated. Run without asc_mode enabled instead.')
+}
+
+md[md$asc_group %in% small_ASCs, 'asc_group'] <- 'small-ASC'
 
 ASC_split <- split(md, md$asc_group)
 
@@ -153,12 +159,15 @@ for (asc_choice in names(ASC_split)){
     message(paste0('Saving info for ASC ', asc_choice, '...'))
     # manifest[asc_choice, 'asc_id'] <- paste0(asc_choice, '_', META_LABEL)
 
-    if (!dir.exists(file.path('ASCs', asc_choice))){
-      dir.create(file.path('ASCs', asc_choice))
-    }
+    # if (!dir.exists(file.path('ASCs', asc_choice))){
+    #   dir.create(file.path('ASCs', asc_choice))
+    # }
+
+    asc_md <- ASC_split[[asc_choice]]
+    asc_md$ASC <- asc_choice
   
-    write_tsv(ASC_split[[asc_choice]],
-             file.path('ASCs', asc_choice, paste0(asc_choice, '_', META_LABEL, '_md.tsv.gz')))
+    write_tsv(asc_md,
+             file.path(paste0(asc_choice, '_md.tsv.gz')))
 
     # manifest[asc_choice, 'airr'] <- file.path(asc_choice, paste0(asc_choice, '_', META_LABEL, '_md.tsv.gz'))
 
@@ -167,13 +176,17 @@ for (asc_choice in names(ASC_split)){
         dplyr::filter(sequence_id %in% ASC_split[[asc_choice]]$sequence_id)
 
     write_tsv(emb_filtered,
-                file.path('ASCs', asc_choice, paste0(asc_choice, '_', META_LABEL, '_emb.tsv.gz')))
+                file.path(paste0(asc_choice, '_emb.tsv.gz')))
+  } else{
+    # write dummy file
+    write_tsv(data.frame(sequence_id = character()),
+                file.path(paste0(asc_choice, '_emb.tsv.gz')))
   }
   
   # include a filename regardless
   # manifest[asc_choice, 'embedding'] <- file.path(asc_choice, paste0(asc_choice, '_', META_LABEL, '_emb.tsv.gz'))
 
-  message(paste0(nrow(ASC_split[[asc_choice]]), ' sequences recorded for ', META_LABEL, ', ', asc_choice, '.'))
+  message(paste0(nrow(ASC_split[[asc_choice]]), ' sequences recorded for ', asc_choice, '.'))
   
 }
 

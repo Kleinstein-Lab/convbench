@@ -344,9 +344,16 @@ do_wilcox_test <- function(results_df, da_variable, disease_group, cluster_col){
             dplyr::pull(subject_id)
 
   wilcox_res_list <- lapply(row.names(cluster_subject_freqs), function(clust){
-    x <- as.numeric(cluster_subject_freqs[clust,ctrl])
-    y <- as.numeric(cluster_subject_freqs[clust,dis])
-    p_val <- wilcox.test(x, y, alternative = 'less', exact = FALSE)$p.value
+
+    if(clust == '0'){
+      p_val <- NA
+    } else{
+      x <- as.numeric(cluster_subject_freqs[clust,ctrl])
+      y <- as.numeric(cluster_subject_freqs[clust,dis])
+
+      p_val <- wilcox.test(x, y, alternative = 'less', exact = FALSE)$p.value
+    }
+    
     return(data.frame(convergent_clone_id = clust,
                       p_value = p_val))
   })
@@ -542,6 +549,7 @@ args <- parser$parse_args()
 # specify which dataset we are analyzing
 DATA_LOC <- args$data_loc
 MD_LOC <- args$metadata_loc
+MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_', 1)
 
 OUTPUT_DIR <- args$output_dir
 
@@ -1150,10 +1158,11 @@ X.cells <- dplyr::left_join(X.cells, fisher_sum, by = 'da.region.label')
 
 message('Completing one-sided Wilcoxon DA tests...')
 
-wilcox_res <- do_wilcox_test(X.cells %>% dplyr::filter(da.region.label != '0'), 
+wilcox_res <- do_wilcox_test(X.cells, 
                              DA_VAR, DISEASE_GP, 'da.region.label')
 
 wilcox_res %>%
+  # dplyr::filter(!is.na(p_value)) %>%
   ggplot(aes(x = p_value)) + 
   geom_histogram(color = 'white', binwidth = 0.01) + 
   theme_bw() +
@@ -1173,7 +1182,7 @@ X.cells <- dplyr::left_join(X.cells, wilcox_sum, by = 'da.region.label')
 names(X.cells)[names(X.cells) == 'id_col'] <- ID_COL_NAME
 
 write.table(X.cells, 
-            file.path(OUTPUT_DIR, 'tables', 'da_seqs.tsv'), 
+            file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, '_da_seqs.tsv')), 
             sep='\t', quote = F, row.names = F)
 
 names(X.cells)[names(X.cells) == ID_COL_NAME] <- 'id_col'

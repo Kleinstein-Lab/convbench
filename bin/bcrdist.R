@@ -626,6 +626,8 @@ args <- parser$parse_args()
 TCRDIST_SCRIPT <- Sys.which('tcrdist3.py')
 
 MD_LOC <- args$metadata_loc
+MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_', 1)
+
 OUTPUT_DIR <- args$output_dir
 
 DA_VAR <- args$da_variable
@@ -971,7 +973,7 @@ colnames(sum2) <- c('convergent_clone_id', 'p_value_fisher', 'odds_ratio_fisher'
 
 sum <- dplyr::left_join(sum1, sum2, by = 'convergent_clone_id')
   
-write.table(sum, file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"), sep="\t", quote = F, row.names = F)
+# write.table(sum, file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, "_seq_summary.tsv")), sep="\t", quote = F, row.names = F)
 
 # get ending time after getting clusters & Fisher Test and making basic figures/tables
 end_time <- Sys.time()
@@ -997,7 +999,7 @@ colnames(wilcox_sum) <- c('convergent_clone_id', 'p_value_wilcox', 'fdr_wilcox')
 
 sum <- dplyr::left_join(sum, wilcox_sum, by = 'convergent_clone_id')
 
-write.table(sum, file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"), 
+write.table(sum, file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, "_seq_summary.tsv")), 
             sep="\t", quote = F, row.names = F)
 
 wilcox_res %>%
@@ -1049,7 +1051,7 @@ if (AUC_VAR != FALSE){
   # JACCARD #
   ###########
   
-  sum <- read.csv(file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"), sep = '\t')
+  # sum <- read.csv(file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, "_seq_summary.tsv")), sep = '\t')
   
   jaccard_df <- sum %>%
     dplyr::mutate(p_under_0.005 = p_value_fisher <= 0.005,
