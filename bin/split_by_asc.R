@@ -134,7 +134,7 @@ ASCs <- unique(md$asc_group)
 
 # combine ASCs under 1,000 sequences
 message('Combining ASCs with under 1,000 sequences...')
-small_ASCs <- table(md$asc_group)[table(md$asc_group) < 200] 
+small_ASCs <- table(md$asc_group)[table(md$asc_group) < 1000] 
 small_ASCs <- names(small_ASCs)
 
 # do not continue if it just makes one group
