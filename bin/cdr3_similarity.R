@@ -476,6 +476,9 @@ parser$add_argument('-t', '--cluster_threshold', type = 'double', default = '0.1
 parser$add_argument('-l', '--linkage_method', type = 'character', default = 'single',
                     help = 'The linkage method to be used in forming clusters.')
 
+# parser$add_argument('-c', '--cpu', type = 'integer', default = 1,
+#                     help = 'Specify the number of cpus used to do hierarchical clustering.')
+
 parser$add_argument('-a', '--auc_var', type = 'character', default = FALSE,
                     help = 'Specify which column should be used for generating AUC curve (i.e. "simulated" or "binder"). Column type should be logical. If no AUC variable, set to FALSE.')
 
@@ -501,6 +504,7 @@ DISEASE_GP <- args$disease_group
 
 THRESH <- args$cluster_threshold
 LINKAGE <- args$linkage_method
+# CPUS <- args$cpu
 
 VDJ <- args$vdj_info
 SINGLE_CELL <- args$single_cell

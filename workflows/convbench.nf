@@ -3,6 +3,7 @@
     IMPORT MODULES / SUBWORKFLOWS / FUNCTIONS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
+include { SPLIT_BY_ASC        } from '../modules/local/split_by_asc/main'
 include { CDR3_SIMILARITY        } from '../modules/local/cdr3_similarity/main'
 include { MILO                   } from '../modules/local/milo/main'
 include { DASEQ                  } from '../modules/local/daseq/main'
@@ -36,39 +37,100 @@ workflow CONVBENCH {
     ch_samplesheet.dump(tag: "samplesheet")
 
     //
+    // MODULE: Run split_by_ASC
+    //
+
+    if (params.asc_mode && !params.asc_guide){
+        error "When --asc_mode is enabled, you must provide --asc_guide."
+    }
+
+    if (params.asc_mode){
+
+        // make channel for guide
+        asc_guide = Channel.value(file(params.asc_guide))
+
+        // make ASC level channel    
+        asc_splitting = SPLIT_BY_ASC(ch_samplesheet, asc_guide)
+
+        ch_file_pairs = asc_splitting.flatMap{ meta, asc_dirs ->
+
+            asc_dirs.collect { asc_dir ->
+                
+                def asc_id = asc_dir.baseName
+
+                def airr_asc = file("${asc_dir}/${asc_id}_${meta.id}_md.tsv.gz")
+                def embedding_asc = file("${asc_dir}/${asc_id}_${meta.id}_emb.tsv.gz")
+
+            
+            tuple(
+                id:"${asc_id}_${meta.id}",
+                airr_asc,
+                embedding_asc
+            )
+
+            }
+        }
+    
+    }
+
+    //
     // MODULE: Run CDR3_similarity
     //
 
     if (params.conv_tools && params.conv_tools.split(',').contains('cdr3_similarity')){
-        CDR3_SIMILARITY(
-            ch_samplesheet
-        )
+        if(params.asc_mode){
+            CDR3_SIMILARITY(
+                ch_file_pairs
+            )
+        } else{
+            CDR3_SIMILARITY(
+                ch_samplesheet
+            )
+        }
     }
 
     //
     // MODULE: Run Milo
     //
     if (params.conv_tools && params.conv_tools.split(',').contains('milo')){
-        MILO(
-            ch_samplesheet
-        )
+        if(params.asc_mode){
+            MILO(
+                ch_file_pairs
+            )
+        } else{
+            MILO(
+                ch_samplesheet
+            )
+        }
     }
     //
     // MODULE: Run DA-seq
     //
     if (params.conv_tools && params.conv_tools.split(',').contains('daseq')){
-        DASEQ(
-            ch_samplesheet
-        )
+        if(params.asc_mode){
+            DASEQ(
+                ch_file_pairs
+            )
+        } else{
+            DASEQ(
+                ch_samplesheet
+            )
+        }
     }
 
     //
     // MODULE: Run BCRdist
     //
     if (params.conv_tools && params.conv_tools.split(',').contains('bcrdist')){
-        BCRDIST(
-            ch_samplesheet
-        )
+        if(params.asc_mode){
+            BCRDIST(
+                ch_file_pairs
+            )
+        } else{
+            BCRDIST(
+                ch_samplesheet
+            )
+        }
     }
 
     //
