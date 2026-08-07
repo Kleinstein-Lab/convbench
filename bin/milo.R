@@ -777,6 +777,17 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'milo.RDS')) | OVERWRITE == T){
   design_formula <- as.formula(formula_string)
   
   message(paste0('Using formula: ', formula_string))
+
+  ### DEBUGGING ###
+
+  cell.sizes <- colSums(nhoodCounts(milo))
+
+  dge <- DGEList(counts=nhoodCounts(milo),
+                 lib.size=cell.sizes)
+
+  print(dge$samples)
+
+  #################
   
   da_results <- testNhoods(milo, 
                            norm.method = 'logMS',
