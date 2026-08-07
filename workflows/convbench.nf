@@ -3,21 +3,24 @@
     IMPORT MODULES / SUBWORKFLOWS / FUNCTIONS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
-include { SPLIT_BY_ASC           } from '../modules/local/split_by_asc/main'
-include { CDR3_SIMILARITY        } from '../modules/local/cdr3_similarity/main'
-include { CDR3_SIMILARITY_ASC    } from '../modules/local/cdr3_similarity/main'
-include { MILO                   } from '../modules/local/milo/main'
-include { MILO_ASC               } from '../modules/local/milo/main'
-include { DASEQ                  } from '../modules/local/daseq/main'
-include { DASEQ_ASC              } from '../modules/local/daseq/main'
-include { BCRDIST                } from '../modules/local/bcrdist/main'
-include { BCRDIST_ASC            } from '../modules/local/bcrdist/main'
-include { MULTIQC                } from '../modules/nf-core/multiqc/main'
-include { GET_ASC_AUROC          } from '../modules/local/get_asc_auroc/main'
-include { paramsSummaryMap       } from 'plugin/nf-schema'
-include { paramsSummaryMultiqc   } from '../subworkflows/nf-core/utils_nfcore_pipeline'
-include { softwareVersionsToYAML } from '../subworkflows/nf-core/utils_nfcore_pipeline'
-include { methodsDescriptionText } from '../subworkflows/local/utils_nfcore_convbench_pipeline'
+include { SPLIT_BY_ASC                                            } from '../modules/local/split_by_asc/main'
+include { CDR3_SIMILARITY                                         } from '../modules/local/cdr3_similarity/main'
+include { CDR3_SIMILARITY_ASC                                     } from '../modules/local/cdr3_similarity/main'
+include { MILO                                                    } from '../modules/local/milo/main'
+include { MILO_ASC                                                } from '../modules/local/milo/main'
+include { DASEQ                                                   } from '../modules/local/daseq/main'
+include { DASEQ_ASC                                               } from '../modules/local/daseq/main'
+include { BCRDIST                                                 } from '../modules/local/bcrdist/main'
+include { BCRDIST_ASC                                             } from '../modules/local/bcrdist/main'
+include { MULTIQC                                                 } from '../modules/nf-core/multiqc/main'
+include { GET_ASC_AUROC as GET_CDR3_SIMILARITY_ASC_AUROC          } from '../modules/local/get_asc_auroc/main'
+include { GET_ASC_AUROC as GET_MILO_ASC_AUROC                     } from '../modules/local/get_asc_auroc/main'
+include { GET_ASC_AUROC as GET_DASEQ_ASC_AUROC                    } from '../modules/local/get_asc_auroc/main'
+include { GET_ASC_AUROC as GET_BCRDIST_ASC_AUROC                  } from '../modules/local/get_asc_auroc/main'
+include { paramsSummaryMap                                        } from 'plugin/nf-schema'
+include { paramsSummaryMultiqc                                    } from '../subworkflows/nf-core/utils_nfcore_pipeline'
+include { softwareVersionsToYAML                                  } from '../subworkflows/nf-core/utils_nfcore_pipeline'
+include { methodsDescriptionText                                  } from '../subworkflows/local/utils_nfcore_convbench_pipeline'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -103,7 +106,7 @@ workflow CONVBENCH {
                 }
                 .groupTuple(by: [0, 1])
 
-            GET_ASC_AUROC(cdr3_sim_asc_input)
+            GET_CDR3_SIMILARITY_ASC_AUROC(cdr3_sim_asc_input)
         
         } else{
             CDR3_SIMILARITY(
@@ -128,7 +131,7 @@ workflow CONVBENCH {
                 }
                 .groupTuple(by: [0, 1])
 
-            GET_ASC_AUROC(milo_asc_input)
+            GET_MILO_ASC_AUROC(milo_asc_input)
             
         } else{
             MILO(
@@ -152,7 +155,7 @@ workflow CONVBENCH {
                 }
                 .groupTuple(by: [0, 1])
 
-            GET_ASC_AUROC(daseq_asc_input)
+            GET_DASEQ_ASC_AUROC(daseq_asc_input)
 
         } else{
             DASEQ(
@@ -177,7 +180,7 @@ workflow CONVBENCH {
                 }
                 .groupTuple(by: [0, 1])
 
-            GET_ASC_AUROC(bcrdist_asc_input)
+            GET_BCRDIST_ASC_AUROC(bcrdist_asc_input)
 
         } else{
             BCRDIST(

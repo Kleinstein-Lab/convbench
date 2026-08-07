@@ -199,7 +199,7 @@ if (TOOL ==  'cdr3_similarity'){
                                 AUC = c(p_cdr3_fisher_asc$auroc,
                                         p_cdr3_wilcox_asc$auroc))
 
-        write_tsv(all_auc_res, file.path('tables', 'AUC_summary.tsv'))
+        write_tsv(all_auc_res, file.path('tables', 'ASC_AUC_summary.tsv'))
     }
 }
 
@@ -211,7 +211,7 @@ if (TOOL == 'DA-seq'){
     res_files <- lapply(MD_LOCS, function(f){
       df <- readr::read_tsv(f, show_col_types = F)
 
-      asc_id <- stringr::str_split_i(basename(f), '_seq_summary', 1)
+      asc_id <- stringr::str_split_i(basename(f), '_da_seqs', 1)
 
       df <- df %>%
         dplyr::mutate(ASC = asc_id,
@@ -271,7 +271,7 @@ if (TOOL == 'DA-seq'){
                                         p_daseq_fisher$auroc,
                                         p_daseq_onesided$auroc))
 
-        write_tsv(all_auc_res, file.path('tables', 'AUC_summary.tsv'))
+        write_tsv(all_auc_res, file.path('tables', 'ASC_AUC_summary.tsv'))
     }
 }
 
@@ -283,7 +283,7 @@ if (TOOL == 'Milo'){
 
       df <- readr::read_tsv(f, show_col_types = F)
 
-     asc_id <- stringr::str_split_i(basename(f), '_seq_summary', 1)
+     asc_id <- stringr::str_split_i(basename(f), '_seq_results', 1)
 
       df <- df %>%
         dplyr::mutate(ASC = asc_id,
@@ -317,7 +317,7 @@ if (TOOL == 'Milo'){
         all_auc_res <- data.frame(tool = c('Milo'),
                                 AUC = c(p_milo$auroc))
 
-        write_tsv(all_auc_res, file.path('tables', 'AUC_summary.tsv'))
+        write_tsv(all_auc_res, file.path('tables', 'ASC_AUC_summary.tsv'))
     }
 } 
 
@@ -377,7 +377,7 @@ if (TOOL == 'BCRdist'){
                                 AUC = c(p_bcrdist_fisher_asc$auroc,
                                         p_bcrdist_wilcox_asc$auroc))
 
-        write_tsv(all_auc_res, file.path('tables', 'AUC_summary.tsv'))
+        write_tsv(all_auc_res, file.path('tables', 'ASC_AUC_summary.tsv'))
     }
 }
 

@@ -549,7 +549,7 @@ args <- parser$parse_args()
 # specify which dataset we are analyzing
 DATA_LOC <- args$data_loc
 MD_LOC <- args$metadata_loc
-MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_', 1)
+MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_md', 1)
 
 OUTPUT_DIR <- args$output_dir
 

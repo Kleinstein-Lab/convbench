@@ -496,7 +496,7 @@ parser$add_argument('-r', '--remove_dups', type = 'logical', default = FALSE,
 args <- parser$parse_args()
 
 MD_LOC <- args$metadata_loc
-MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_', 1)
+MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_md', 1)
 
 OUTPUT_DIR <- args$output_dir
 

@@ -450,7 +450,7 @@ args <- parser$parse_args()
 # specify which dataset we are analyzing
 DATA_LOC <- args$data_loc
 MD_LOC <- args$metadata_loc
-MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_', 1)
+MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_md', 1)
 
 OUTPUT_DIR <- args$output_dir
 
@@ -924,6 +924,11 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', paste(MD_NAME, '_seq_results.ts
   })
   
   min_p_nhoods_df <- do.call(rbind, min_p_nhoods)
+
+  if (AUC_VAR != FALSE){
+    min_p_nhoods_df <- min_p_nhoods_df %>%
+      dplyr::left_join(md_reduced[c('id_col', AUC_VAR)], by = 'id_col')
+  }
   
   write.table(min_p_nhoods_df, 
               file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, '_seq_results.tsv')), 
@@ -964,8 +969,11 @@ if (AUC_VAR != FALSE){
   min_p_nhoods_df[is.na(min_p_nhoods_df$min_nhood_FDR), 'min_nhood_FDR'] <- 1
   
   # add AUC var info
-  min_p_nhoods_df <- min_p_nhoods_df %>%
-    dplyr::inner_join(md_reduced, by = 'id_col')
+  if (!AUC_VAR %in% colnames(min_p_nhoods_df)){
+    min_p_nhoods_df <- min_p_nhoods_df %>%
+      dplyr::left_join(md_reduced[c('id_col', AUC_VAR)])
+  }
+
   
   auc_thresholds <- sort(unique(min_p_nhoods_df$min_nhood_FDR))
   # auc_thresholds <- quantile(min_p_nhoods_df$min_nhood_FDR, seq(0, 1, 0.01), names=F)
