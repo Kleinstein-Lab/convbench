@@ -187,7 +187,7 @@ fisher_test_cluster <- function(df, subj_summary, input_convergent_clone_id, con
   
 }
 
-get_fisher_exact_table <- function(hier_clone_df, condition, condition_col = 'status', clone_id_col = 'convergent_clone_id', count_col = 'subject_id', filter = TRUE){
+get_fisher_exact_table <- function(hier_clone_df, condition, condition_col = 'status', clone_id_col = 'convergent_clone_id', count_col = 'subject_id', subj_summary = NULL, filter = TRUE){
   # go from a hierarchical clones output dataframe
   # then get the clones worth doing fisher's exact on
   # do the fisher's exact test on every clone to test for healthy or diseased patients
@@ -212,9 +212,13 @@ get_fisher_exact_table <- function(hier_clone_df, condition, condition_col = 'st
   
   # get the total subject information summarized BEFORE filtering
   # in case subjects will get lost
-  subj_summary <- hier_clone_df %>%
-    dplyr::select(!!sym(count_col), !!sym(condition_col)) %>%
-    distinct() 
+
+  # in the case of ASCs, total subj information can also be input as a parameter
+  if (is.null(subj_summary)){
+    subj_summary <- hier_clone_df %>%
+      dplyr::select(!!sym(count_col), !!sym(condition_col)) %>%
+      distinct() 
+  }
   
   # reduce the table to prepare for fisher and do tests faster
   hier_clone_df_fisher <- hier_clone_df %>%
@@ -263,13 +267,13 @@ get_fisher_exact_table <- function(hier_clone_df, condition, condition_col = 'st
   return(fisher_results_all)
 }
 
-get_combined_fisher_exact_table <- function(hier_clone_df, condition_set, condition_col = 'status', clone_id_col = 'convergent_clone_id', count_col = 'subject_id', filter = TRUE){
+get_combined_fisher_exact_table <- function(hier_clone_df, condition_set, condition_col = 'status', clone_id_col = 'convergent_clone_id', count_col = 'subject_id', subj_summary = NULL, filter = TRUE){
   # hier_clone_df: hierarchical clones df
   # condition set: character vector containing all conditions to be tested
   
   condition_fisher_dfs <- lapply(condition_set, function(condition){
     
-    get_fisher_exact_table(hier_clone_df, condition, condition_col, clone_id_col, count_col, filter)
+    get_fisher_exact_table(hier_clone_df, condition, condition_col, clone_id_col, count_col, subj_summary, filter)
     
   })
   
@@ -380,23 +384,25 @@ make_fisher_overview_plot <- function(fisher_table, df_hier_clones, level, condi
   
 }
 
-do_wilcox_test <- function(results_df, da_variable, disease_group, cluster_col){
+do_wilcox_test <- function(results_df, da_variable, disease_group, cluster_col, subject_depths = NULL){
   # perform Wilcoxon test on each cluster comparing counts in each group normalized
   # by subject depth.
   # results_df should contain information about the cluster ID (cluster_col), da_variable,
   # and subject IDs
 
   # Subject sequencing depths
-  subject_depths <- results_df %>%
-    dplyr::group_by(subject_id, !!sym(da_variable)) %>%
-    dplyr::summarize(subj_depth = n())
+  if(is.null(subject_depths)){
+    subject_depths <- results_df %>%
+      dplyr::group_by(subject_id, !!sym(da_variable)) %>%
+      dplyr::summarize(depth = n())
+  }
 
   # Cluster frequencies per subject
   cluster_subject_freqs <- results_df %>%
     dplyr::group_by(!!sym(cluster_col), subject_id) %>%
     dplyr::summarize(cluster_sequences = n()) %>%
-    dplyr::left_join(subject_depths, by = 'subject_id') %>%
-    dplyr::mutate(normalized_freq = cluster_sequences / subj_depth) %>%
+    dplyr::full_join(subject_depths, by = 'subject_id') %>%
+    dplyr::mutate(normalized_freq = cluster_sequences / depth) %>%
     tidyr::pivot_wider(id_cols = cluster_col, 
                       names_from = 'subject_id', 
                       values_from = 'normalized_freq', 
@@ -549,6 +555,9 @@ parser$add_argument('-he', '--helper_loc', type = 'character', default = 'bin/tc
 parser$add_argument('-md', '--metadata_loc', type = 'character', default = 'metadata',
                     help = 'File path for the metadata location.')
 
+parser$add_argument('-li', '--library_sizes', type = 'character', default = NULL,
+                    help = 'File path for the library sizes file location.')
+
 parser$add_argument('-o', '--output_dir', type = 'character', default = 'tcrdist3_fisher_output',
                     help = 'Specify an output directory location.')
 
@@ -626,6 +635,7 @@ args <- parser$parse_args()
 TCRDIST_SCRIPT <- Sys.which('tcrdist3.py')
 
 MD_LOC <- args$metadata_loc
+LIB_SIZES_LOC <- args$library_sizes
 MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_md', 1)
 
 OUTPUT_DIR <- args$output_dir
@@ -921,12 +931,19 @@ if(!is.null(p2)) ggsave(file.path(OUTPUT_DIR, 'figures','n_sequences_distributio
 ### FISHER EXACT TEST ###
 #########################
 # Fisher's exact test
-  
+
+if(!is.null(LIB_SIZES_LOC)){
+  lib_sizes <- read.csv(LIB_SIZES_LOC, sep = '\t') %>% as.data.frame()
+} else{
+  lib_sizes <- NULL
+}
+
 fisher_table <- get_combined_fisher_exact_table(hier_clone_df = convergent_clone,
                                                   condition_set = c(DISEASE_GP),
                                                   condition_col = DA_VAR,
                                                   clone_id_col = 'convergent_clone_id',
                                                   count_col = 'subject_id',
+                                                  subj_summary = lib_sizes,
                                                   filter = FALSE)
   
 write.table(fisher_table, file.path(OUTPUT_DIR, 'tables', "fisher_table.tsv"), sep="\t", quote = F, row.names = F)
@@ -992,7 +1009,7 @@ time_taken <- end_time - start_time
 
 message('Completing Wilcoxon DA tests...')
 
-wilcox_res <- do_wilcox_test(convergent_clone, DA_VAR, DISEASE_GP, 'convergent_clone_id')
+wilcox_res <- do_wilcox_test(convergent_clone, DA_VAR, DISEASE_GP, 'convergent_clone_id', subject_depths = lib_sizes)
 
 wilcox_sum <- wilcox_res
 colnames(wilcox_sum) <- c('convergent_clone_id', 'p_value_wilcox', 'fdr_wilcox')

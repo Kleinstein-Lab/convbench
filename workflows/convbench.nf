@@ -60,33 +60,32 @@ workflow CONVBENCH {
         // make ASC level channel    
         asc_splitting = SPLIT_BY_ASC(ch_samplesheet, asc_guide)
 
-        ch_file_pairs = asc_splitting.flatMap{ meta, md_files, emb_files ->
+        ch_file_pairs = asc_splitting.flatMap{ meta, md_files, emb_files, library_sizes  ->
             
             def meta_id = meta.id
 
             def labeled_md_files = md_files
                 .collect{ it ->
-                    [meta_id, it.name.split('_')[0], it]
+                    [meta_id, it.name.split('_')[0], library_sizes, it]
                 }
 
             def labeled_emb_files = emb_files
                 .collect{ it ->
-                    [meta_id, it.name.split('_')[0], it]
+                    [meta_id, it.name.split('_')[0], library_sizes, it]
                 }
             
             return tuple(
                 labeled_md_files + labeled_emb_files
             )
         }
-        .groupTuple(by: [0, 1])
-        .map{ meta_id, asc_id, files -> // ensure files are always in the right order
+        .groupTuple(by: [0, 1, 2])
+        .map{ meta_id, asc_id, library_sizes, files -> // ensure files are always in the right order
         
             def airr = files.find { it.name.endsWith('_md.tsv.gz') }
             def embedding = files.find { it.name.endsWith('_emb.tsv.gz')}
 
-            tuple(meta_id, asc_id, airr, embedding)
+            tuple(meta_id, asc_id, airr, embedding, library_sizes)
         }
-    
     }
 
     //

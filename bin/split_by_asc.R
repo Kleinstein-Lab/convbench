@@ -27,6 +27,9 @@ parser$add_argument('-d', '--data_loc', type = 'character', default = 'data',
 parser$add_argument('-md', '--metadata_loc', type = 'character', default = 'metadata',
                     help = 'File path for the metadata location. Metadata and data files should have 1:1 matching sequence identifiers.')
 
+parser$add_argument('-da', '--da_variable', type = 'character', default = 'status',
+                    help = 'Stratification variable that should be used to determine differential abundance. There should be two levels in this factor/categorical variable.')
+
 parser$add_argument('-e', '--use_embedding', type = 'logical', default = TRUE,
                     help = 'Specify whether embedding AND metadata (TRUE) or ONLY metadata (FALSE) should be accounted for in ASC splitting.')
 
@@ -37,6 +40,8 @@ ASC_GUIDE_LOC <- args$asc_guide
 MD_LOC <- args$metadata_loc
 DATA_LOC <- args$data_loc
 USE_EMB <- as.logical(args$use_embedding)
+DA_VAR <- args$da_variable
+
 # META_LABEL <- args$label
 
 # if (!dir.exists(file.path('ASCs'))){
@@ -51,7 +56,7 @@ USE_EMB <- as.logical(args$use_embedding)
 tryCatch(
   
   {
-    asc_guide <- airr::read_rearrangement(ASC_GUIDE_LOC)
+    asc_guide <- readr::read_tsv(ASC_GUIDE_LOC)
   }, error = function(e){
     
     stop(e)
@@ -77,7 +82,7 @@ message(paste0('Loading metadata: ', MD_LOC))
 tryCatch(
   
   {
-    md <- readr::read_tsv(MD_LOC)
+    md <- airr::read_rearrangement(MD_LOC)
   }, error = function(e){
     
     stop(e)
@@ -103,6 +108,26 @@ if (USE_EMB){
 )
 
 }
+
+if (USE_EMB){
+  # get common sequences
+  common_seqs <- intersect(md$sequence_id, data$sequence_id)
+
+  md <- md %>%
+    dplyr::filter(sequence_id %in% common_seqs) %>%
+    as.data.frame(check.names = F)
+
+  data <- data %>%
+    dplyr::filter(sequence_id %in% common_seqs) %>%
+    as.data.frame(check.names = F)
+}
+
+# save library size and da var information for future steps
+lib_sizes <- md %>%
+  dplyr::group_by(subject_id, !!sym(DA_VAR)) %>%
+  dplyr::summarize(depth = n())
+
+write_tsv(lib_sizes, 'library_sizes.tsv')
 
 # add the v alleles
 md$v_allele <- getAllele(md$v_call, strip_d = F, omit_nl = F)
@@ -134,15 +159,15 @@ ASCs <- unique(md$asc_group)
 
 # combine ASCs under 1,000 sequences
 message('Combining ASCs with under 1,000 sequences...')
-small_ASCs <- table(md$asc_group)[table(md$asc_group) < 1000] 
+small_ASCs <- table(md$asc_group)[table(md$asc_group) < 200] 
 small_ASCs <- names(small_ASCs)
 
+md[md$asc_group %in% small_ASCs, 'asc_group'] <- 'small-ASC'
+
 # do not continue if it just makes one group
-if (length(small_ASCs) == 1){
+if (length(unique(md$asc_group)) == 1){
   stop('Execution halted: only 1 ASC is generated. Run without asc_mode enabled instead.')
 }
-
-md[md$asc_group %in% small_ASCs, 'asc_group'] <- 'small-ASC'
 
 ASC_split <- split(md, md$asc_group)
 

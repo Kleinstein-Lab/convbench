@@ -500,6 +500,9 @@ parser$add_argument('-d', '--data_loc', type = 'character', default = 'data',
 parser$add_argument('-md', '--metadata_loc', type = 'character', default = 'metadata',
                     help = 'File path for the metadata location. Metadata and data files should have 1:1 matching sequence identifiers.')
 
+parser$add_argument('-li', '--library_sizes', type = 'character', default = NULL,
+                    help = 'File path for the library sizes file location.')
+
 parser$add_argument('-o', '--output_dir', type = 'character', default = 'DAseq_output',
                     help = 'Specify an output directory location.')
 
@@ -549,6 +552,7 @@ args <- parser$parse_args()
 # specify which dataset we are analyzing
 DATA_LOC <- args$data_loc
 MD_LOC <- args$metadata_loc
+LIB_SIZES_LOC <- args$library_sizes
 MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_md', 1)
 
 OUTPUT_DIR <- args$output_dir

@@ -11,7 +11,8 @@ process SPLIT_BY_ASC{
     output:
     tuple val(meta),
           path("*_md.tsv.gz"),
-          path("*_emb.tsv.gz")
+          path("*_emb.tsv.gz"),
+          path("library_sizes.tsv")
 
     script:
     """
@@ -19,6 +20,7 @@ process SPLIT_BY_ASC{
     -a $asc_guide \
     -d $embedding \
     -md $airr \
+    -da ${params.da_variable} \
     -e TRUE
 
     """

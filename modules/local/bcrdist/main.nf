@@ -50,7 +50,7 @@ process BCRDIST_ASC{
     container "docker.io/cfsullivan16/bcrdist:1.0.0dev"
 
     input:
-    tuple val(meta_id), val(asc_id), path(airr), path(embedding)
+    tuple val(meta_id), val(asc_id), path(airr), path(embedding), path(library_sizes)
 
     output:
     tuple val(meta_id), path("tables/*_seq_summary.tsv"), emit: auc_input
@@ -73,6 +73,7 @@ process BCRDIST_ASC{
     bcrdist.R \
     -he "bin/tcrdist3.py" \
     -md $airr \
+    -li $library_sizes \
     -o . \
     -da ${params.da_variable} \
     -dg ${params.disease_gp} \
