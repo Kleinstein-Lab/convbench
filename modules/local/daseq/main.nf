@@ -26,6 +26,7 @@ process DASEQ{
     daseq.R \
     -d $embedding \
     -md $airr \
+    -li ${params.lib_size_override} \
     -o . \
     -da ${params.da_variable} \
     -dg ${params.disease_gp} \

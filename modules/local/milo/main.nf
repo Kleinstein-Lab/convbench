@@ -22,6 +22,7 @@ process MILO{
     milo.R \
     -d $embedding \
     -md $airr \
+    -li ${params.lib_size_override} \
     -o . \
     -da ${params.da_variable} \
     -k ${params.milo_k_val} \

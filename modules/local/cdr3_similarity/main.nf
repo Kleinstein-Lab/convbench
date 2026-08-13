@@ -22,6 +22,7 @@ process CDR3_SIMILARITY{
     """
     cdr3_similarity.R \
     -md $airr \
+    -li ${params.lib_size_override} \
     -o . \
     -da ${params.da_variable} \
     -dg ${params.disease_gp} \

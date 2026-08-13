@@ -28,6 +28,7 @@ process BCRDIST{
     bcrdist.R \
     -he "bin/tcrdist3.py" \
     -md $airr \
+    -li ${params.lib_size_override} \
     -o . \
     -da ${params.da_variable} \
     -dg ${params.disease_gp} \
