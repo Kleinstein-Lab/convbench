@@ -175,9 +175,17 @@ get_fisher_exact_table <- function(hier_clone_df, condition, condition_col = 'st
     # pull out the fisher test results looking for a disease and a healthy cluster
     fisher <- fisher_results$fisher_test_result
     
-    results_df$p_value <- fisher$p.value
-    
-    results_df$odds_ratio <- fisher$estimate
+    if (clone_id == '0'){
+
+      results_df$p_value <- NA
+      results_df$odds_ratio <- NA
+
+    } else{
+
+      results_df$p_value <- fisher$p.value
+      results_df$odds_ratio <- fisher$estimate
+
+    }
       
     # }
     
@@ -325,7 +333,7 @@ do_wilcox_test <- function(results_df, da_variable, disease_group, cluster_col, 
   cluster_subject_freqs <- results_df %>%
     dplyr::group_by(!!sym(cluster_col), subject_id) %>%
     dplyr::summarize(cluster_sequences = n()) %>%
-    dplyr::full_join(subject_depths, by = 'subject_id') %>%
+    dplyr::left_join(subject_depths, by = 'subject_id') %>%
     dplyr::mutate(normalized_freq = cluster_sequences / depth) %>%
     tidyr::pivot_wider(id_cols = cluster_col, 
                       names_from = 'subject_id', 
@@ -333,13 +341,26 @@ do_wilcox_test <- function(results_df, da_variable, disease_group, cluster_col, 
                       values_fill = 0) %>%
     as.data.frame(check.names = F)
 
-  write.table(cluster_subject_freqs, 
-              file.path(OUTPUT_DIR, 'tables', 'cluster_subject_freqs.tsv'), 
-              sep = '\t', row.names = F, quote = F)
-
   row.names(cluster_subject_freqs) <- as.character(cluster_subject_freqs[[cluster_col]])
   cluster_subject_freqs <- cluster_subject_freqs %>%
                               dplyr::select(-!!sym(cluster_col))
+
+  # add individuals not in the ASC if needed
+  absent_subj <- setdiff(subject_depths$subject_id, colnames(cluster_subject_freqs))
+    
+  if (length(absent_subj) > 0){
+    message(paste0('Adding missing subjects ', paste(absent_subj, collapse = ', '), ' to cluster subject frequency table.'))
+    
+    # add to counts
+    cluster_subject_freqs[, absent_subj] <- 0
+
+  } else{
+    message('No missing subjects detected.')
+  }
+  
+  write.table(cluster_subject_freqs,
+              file.path(OUTPUT_DIR, 'tables', 'cluster_subject_freqs.tsv'), 
+              sep = '\t', row.names = T, quote = F)
 
   ctrl <- subject_depths %>%
             dplyr::filter(!!sym(da_variable) != disease_group) %>%
@@ -1150,7 +1171,7 @@ if(!is.null(LIB_SIZES_LOC)){
   lib_sizes <- NULL
 }
 
-fisher_table <- get_combined_fisher_exact_table(hier_clone_df = X.cells %>% dplyr::filter(da.region.label != '0'),
+fisher_table <- get_combined_fisher_exact_table(hier_clone_df = X.cells,
                                                 condition_set = c(DISEASE_GP),
                                                 condition_col = DA_VAR,
                                                 clone_id_col = 'da.region.label',
