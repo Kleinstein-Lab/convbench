@@ -6,6 +6,7 @@ process DASEQ{
 
     input:
     tuple val(meta), path(airr), path(embedding)
+    path lib_size_override
 
     output:
     path "tables/run_stats.tsv", emit: run_stats
@@ -26,7 +27,7 @@ process DASEQ{
     daseq.R \
     -d $embedding \
     -md $airr \
-    -li ${params.lib_size_override} \
+    -li $lib_size_override \
     -o . \
     -da ${params.da_variable} \
     -dg ${params.disease_gp} \
