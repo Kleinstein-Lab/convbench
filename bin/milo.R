@@ -735,10 +735,76 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'milo.RDS')) | OVERWRITE == T){
                      meta.data = data.frame(colData(milo)), 
                      samples="sample_id")
   
-  design_df <- data.frame(colData(milo))[,c('sample_id', 'subject_id', DA_VAR)]
-  design_df <- distinct(design_df)
-  rownames(design_df) <- design_df$sample_id
-  ## Reorder rownames to match columns of nhoodCounts(milo)
+  Sys.time()
+  message('Calculating distances between nearest neighbors')
+  milo <- calcNhoodDistance(milo,
+                            d = length(colnames(data)),
+                            reduced.dim = 'embedding')
+  
+  # NOTE: not using GLMM currently, but could be implemented if needed
+  formula_string <- paste0('~ ', DA_VAR)
+  
+  design_formula <- as.formula(formula_string)
+  
+  message(paste0('Using formula: ', formula_string))
+
+  # get subjects from whole dataset who may be missing in subset i.e. ASC
+  if(!is.null(LIB_SIZES_LOC)){
+    lib_sizes <- read.csv(LIB_SIZES_LOC, sep = '\t') %>% as.data.frame()
+    
+    # find missing subjects
+    absent_subj <- setdiff(lib_sizes$subject_id, colnames(milo@nhoodCounts))
+    
+    if (length(absent_subj) > 0){
+      message(paste0('Adding missing subjects ', paste(absent_subj, collapse = ', '), ' to Milo neighborhood counts.'))
+    
+      # add to counts
+      new_cols <- Matrix(0, nrow = nrow(milo@nhoodCounts), ncol = 3, sparse = TRUE)
+      colnames(new_cols) <- absent_subj
+      
+      new_nhood_counts <- cbind(milo@nhoodCounts, new_cols)
+      
+      milo@nhoodCounts <- new_nhood_counts
+    } else{
+      message('No missing subjects detected.')
+    }
+    
+    # make sure library size df is consistent with Milo object
+    lib_sizes <- as.data.frame(lib_sizes)
+    row.names(lib_sizes) <- lib_sizes$subject_id
+    
+    lib_sizes <- lib_sizes[colnames(milo@nhoodCounts), , drop=FALSE]
+    
+    # sanity check
+    subj_match <- all(row.names(lib_sizes) == colnames(milo@nhoodCounts))
+    if (subj_match == F){
+      warning('Subjects in Milo neighborhood count matrix are not in line with library size summary. Regression results will not be accurate.')
+    }
+    
+  } else{
+    message('Calculating library sizes from metadata...')
+    lib_sizes <- md %>%
+      dplyr::group_by(subject_id, !!sym(DA_VAR)) %>%
+      dplyr::summarize(depth = n(), .groups = "drop_last") %>%
+      as.data.frame()
+    
+    row.names(lib_sizes) <- lib_sizes$subject_id
+  }
+  
+  print('Library sizes to be used:')
+  print(lib_sizes)
+
+  # input custom cell.sizes for either the dataset as is OR 
+  # the entire dataset, even if in ASC mode
+  cell.sizes <- lib_sizes$depth
+  names(cell.sizes) <- row.names(lib_sizes)
+  
+  # make design_df based on lib sizes
+  design_df <- lib_sizes
+  design_df$sample_id <- design_df$subject_id
+  design_df <- design_df %>% dplyr::select(-depth)
+  
+  ## Reorder rownames to match columns of nhoodCounts(milo) - should already match though
   design_df <- design_df[colnames(nhoodCounts(milo)), , drop=FALSE]
   
   design_df$sample_id <- as.factor(design_df$sample_id)
@@ -750,54 +816,10 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'milo.RDS')) | OVERWRITE == T){
   
   print(table(data.frame(colData(milo))$subject_id))
   
-  Sys.time()
-  message('Calculating distances between nearest neighbors')
-  milo <- calcNhoodDistance(milo,
-                            d = length(colnames(data)),
-                            reduced.dim = 'embedding')
-  
-  # NOTE: not using GLMM currently, but could be implemented if needed
-  # if (USE_GLMM){
-  #   
-  #   formula_string <- paste0(' ~ ', DA_VAR, ' + (1|subject_id)')
-  #   
-  #   design_formula <- as.formula(formula_string)
-  #   
-  #   message(paste0('Using formula: ', formula_string))
-  #   
-  #   da_results <- testNhoods(milo,
-  #                            design = design_formula, 
-  #                            design.df = design_df,
-  #                            reduced.dim = 'embedding',
-  #                            fdr.weighting = 'neighbour-distance',
-  #                            glmm.solver = 'Fisher',
-  #                            norm.method = 'TMM',
-  #                            REML = TRUE)
-  #   
-  # } else{
-  
-  formula_string <- paste0('~ ', DA_VAR)
-  
-  design_formula <- as.formula(formula_string)
-  
-  message(paste0('Using formula: ', formula_string))
+  message('TEST: testing nhoods')
 
-  ### DEBUGGING ###
-  
-  # TODO: add custom cell.sizes based on the library sizes
-  # TODO: add individuals to the matrix who are not in the ASC (??)
-
-  cell.sizes <- colSums(nhoodCounts(milo))
-
-  dge <- DGEList(counts=nhoodCounts(milo),
-                 lib.size=cell.sizes)
-
-  print(dge$samples)
-
-  #################
-  
   da_results <- testNhoods(milo, 
-                           cell.sizes = NULL,
+                           cell.sizes = cell.sizes,
                            norm.method = 'logMS',
                            design = design_formula, 
                            design.df = design_df,
