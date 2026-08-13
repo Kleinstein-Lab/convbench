@@ -759,7 +759,7 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'milo.RDS')) | OVERWRITE == T){
       message(paste0('Adding missing subjects ', paste(absent_subj, collapse = ', '), ' to Milo neighborhood counts.'))
     
       # add to counts
-      new_cols <- Matrix(0, nrow = nrow(milo@nhoodCounts), ncol = 3, sparse = TRUE)
+      new_cols <- Matrix(0, nrow = nrow(milo@nhoodCounts), ncol = length(absent_subj), sparse = TRUE)
       colnames(new_cols) <- absent_subj
       
       new_nhood_counts <- cbind(milo@nhoodCounts, new_cols)
@@ -816,8 +816,6 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'milo.RDS')) | OVERWRITE == T){
   
   print(table(data.frame(colData(milo))$subject_id))
   
-  message('TEST: testing nhoods')
-
   da_results <- testNhoods(milo, 
                            cell.sizes = cell.sizes,
                            norm.method = 'logMS',
