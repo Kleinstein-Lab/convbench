@@ -6,7 +6,6 @@ process BCRDIST{
 
     input:
     tuple val(meta), path(airr), path(embedding)
-    path lib_size_override
 
     output:
     path "tables/run_stats.tsv", emit: run_stats
@@ -29,7 +28,6 @@ process BCRDIST{
     bcrdist.R \
     -he "bin/tcrdist3.py" \
     -md $airr \
-    -li $lib_size_override \
     -o . \
     -da ${params.da_variable} \
     -dg ${params.disease_gp} \

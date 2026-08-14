@@ -43,7 +43,6 @@ workflow CONVBENCH {
     def ch_multiqc_files = channel.empty()
 
     ch_samplesheet.dump(tag: "samplesheet")
-    lib_size_override = Channel.value(file(params.lib_size_override))
 
     //
     // MODULE: Run split_by_ASC
@@ -110,7 +109,7 @@ workflow CONVBENCH {
         
         } else{
             CDR3_SIMILARITY(
-                ch_samplesheet, lib_size_override
+                ch_samplesheet
             )
         }
     }
@@ -135,7 +134,7 @@ workflow CONVBENCH {
             
         } else{
             MILO(
-                ch_samplesheet, lib_size_override
+                ch_samplesheet
             )
         }
     }
@@ -159,7 +158,7 @@ workflow CONVBENCH {
 
         } else{
             DASEQ(
-                ch_samplesheet, lib_size_override
+                ch_samplesheet
             )
         }
     }
@@ -184,7 +183,7 @@ workflow CONVBENCH {
 
         } else{
             BCRDIST(
-                ch_samplesheet, lib_size_override
+                ch_samplesheet
             )
         }
     }

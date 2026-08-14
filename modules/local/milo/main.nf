@@ -6,7 +6,6 @@ process MILO{
 
     input:
     tuple val(meta), path(airr), path(embedding)
-    path lib_size_override
 
     output:
     path "tables/run_stats.tsv", emit: run_stats
@@ -23,7 +22,6 @@ process MILO{
     milo.R \
     -d $embedding \
     -md $airr \
-    -li $lib_size_override \
     -o . \
     -da ${params.da_variable} \
     -k ${params.milo_k_val} \

@@ -6,7 +6,6 @@ process CDR3_SIMILARITY{
 
     input:
     tuple val(meta), path(airr), path(embedding)
-    path lib_size_override
 
     output:
     path "tables/run_stats.tsv", emit: run_stats
@@ -23,7 +22,6 @@ process CDR3_SIMILARITY{
     """
     cdr3_similarity.R \
     -md $airr \
-    -li $lib_size_override \
     -o . \
     -da ${params.da_variable} \
     -dg ${params.disease_gp} \
