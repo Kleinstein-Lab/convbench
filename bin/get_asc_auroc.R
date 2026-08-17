@@ -55,7 +55,7 @@ if (!dir.exists('figures')){
 ### helper functions ###
 ########################
 
-auc_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
+evaluation_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
   
   invalid_seqs <- sum(is.na(res[[p_col]]))
   total_seqs <- nrow(res)
@@ -97,22 +97,44 @@ auc_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
     true_neg <- sum(da.cell.list == F & nonbinder)
     false_pos <- sum(da.cell.list == T & nonbinder)
     
+    # auroc
     TPR <- true_pos / (true_pos + false_neg)
     FPR <- 1 - (true_neg / (true_neg + false_pos))
+
+    # FDR
+    FDR <- false_pos / (false_pos + true_pos)
+
+    # AUPRC
+    precision <- true_pos / (false_pos + true_pos)
     
     return(data.frame('TPR' = TPR,
-                      'FPR' = FPR))
+                      'FPR' = FPR,
+                      'Precision' = precision,
+                      'FDR' = FDR,
+                      'TP' = true_pos,
+                      'FP' = false_pos,
+                      'TN' = true_neg,
+                      'FN' = false_neg))
     
     
   })
   
   auc_df <- do.call(rbind, auc_data)
   auc_df$p_value <- auc_thresholds
+
+  # estimate the first precision point - it should always be NA b/c no false or true positives below the first threshold
+  if (is.na(auc_df[1,'Precision']) & nrow(auc_df) > 1){
+    auc_df[1,'Precision'] <- auc_df[2,'Precision']
+  }
   
   # get auroc
   auroc <- pracma::trapz(auc_df$FPR, auc_df$TPR)
-  title <- paste0(tool, '\nAUC: ', round(auroc, 2))
-  
+  title_auroc <- paste0(tool, '\nAUROC: ', round(auroc, 2))
+
+  # get auprc
+  auprc <- pracma::trapz(auc_df$TPR, auc_df$Precision)
+  title_auprc <- paste0(tool, '\nAUPRC: ', round(auprc, 2))
+
   if (invalid_seqs > 0){
     subtitle <- paste0(prettyNum(sum(valid_seqs), big.mark = ",", scientific = FALSE), '/', 
                        prettyNum(total_seqs, big.mark = ",", scientific = FALSE), ' seqs clustered')
@@ -120,19 +142,34 @@ auc_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
     subtitle <- ''
   }
   
-  p <- auc_df %>%
+  p_auroc <- auc_df %>%
     ggplot(aes(x = FPR, y = TPR)) +
     geom_point(size = 1.25) +
     geom_line() +
-    labs(title = title,
+    labs(title = title_auroc,
          subtitle = subtitle,
          x = 'False Positive Rate',
          y = 'True Positive Rate') + 
     theme_minimal(base_size = 18) +
     theme(plot.title = element_text(face = "bold"),
           plot.subtitle = element_text(size = 12, margin = margin(t = -5)))
+
+  p_auprc <- auc_df %>%
+    ggplot(aes(x = TPR, y = Precision)) +
+    geom_point(size = 1.25) +
+    geom_line() +
+    labs(title = title_auprc,
+         subtitle = subtitle,
+         x = 'Recall',
+         y = 'Precision') + 
+    theme_minimal(base_size = 18) +
+    theme(plot.title = element_text(face = "bold"),
+          plot.subtitle = element_text(size = 12, margin = margin(t = -5))) +
+    scale_y_continuous(limits = c(0, 1))
   
-  return(list('auroc' = auroc, 'plot' = p, 'table' = auc_df))
+  return(list('auroc' = auroc, 'plot_auroc' = p_auroc, 
+              'auprc' = auprc, 'plot_auprc' = p_auprc,
+              'table' = auc_df))
   
 }
 
@@ -170,28 +207,40 @@ if (TOOL ==  'cdr3_similarity'){
         
         message('Calculating CDRH3 Similarity AUC curves...')
 
-        p_cdr3_fisher_asc <- auc_curve(cdr3_sim, 'p_value_fisher', AUC_VAR, tool = 'CDRH3 Similarity + Fisher')
+        p_cdr3_fisher_asc <- evaluation_curve(cdr3_sim, 'p_value_fisher', AUC_VAR, tool = 'CDRH3 Similarity + Fisher')
 
-        ggsave(file.path('figures', 'CDR3SIM_ASC_FISHER_AUC_curve.png'),
-            p_cdr3_fisher_asc$plot,
+        ggsave(file.path('figures', 'CDR3SIM_ASC_FISHER_AUROC.png'),
+            p_cdr3_fisher_asc$plot_auroc,
+            device = 'png',
+            width = 7,
+            height = 6)
+        
+        ggsave(file.path('figures', 'CDR3SIM_ASC_FISHER_AUPRC.png'),
+            p_cdr3_fisher_asc$plot_auprc,
             device = 'png',
             width = 7,
             height = 6)
 
-        write.table(p_cdr3_fisher_asc$table, file.path('tables', 'CDR3SIM_ASC_FISHER_AUC.tsv'), sep = '\t',
+        write.table(p_cdr3_fisher_asc$table, file.path('tables', 'CDR3SIM_ASC_FISHER_EVALUATION.tsv'), sep = '\t',
                     row.names = F, quote = F)
 
         ###
 
-        p_cdr3_wilcox_asc <- auc_curve(cdr3_sim, 'p_value_wilcox', AUC_VAR, tool = 'CDRH3 Similarity + Wilcoxon')
+        p_cdr3_wilcox_asc <- evaluation_curve(cdr3_sim, 'p_value_wilcox', AUC_VAR, tool = 'CDRH3 Similarity + Wilcoxon')
 
-        ggsave(file.path('figures', 'CDR3SIM_ASC_WILCOX_AUC_curve.png'),
-            p_cdr3_wilcox_asc$plot,
+        ggsave(file.path('figures', 'CDR3SIM_ASC_WILCOX_AUROC.png'),
+            p_cdr3_wilcox_asc$plot_auroc,
             device = 'png',
             width = 7,
             height = 6)
 
-        write.table(p_cdr3_wilcox_asc$table, file.path('tables', 'CDR3SIM_ASC_WILCOX_AUC.tsv'), sep = '\t',
+        ggsave(file.path('figures', 'CDR3SIM_ASC_WILCOX_AUPRC.png'),
+            p_cdr3_wilcox_asc$plot_auprc,
+            device = 'png',
+            width = 7,
+            height = 6)
+
+        write.table(p_cdr3_wilcox_asc$table, file.path('tables', 'CDR3SIM_ASC_WILCOX_EVALUATION.tsv'), sep = '\t',
                     row.names = F, quote = F)
 
         all_auc_res <- data.frame(tool = c('CDRH3 Similarity + Fisher',
@@ -227,41 +276,59 @@ if (TOOL == 'DA-seq'){
     if (AUC_VAR != FALSE){
         message('Calculating DA-Seq AUC curves...')
 
-        p_daseq <- auc_curve(daseq, 'wilcox.adj.BH', AUC_VAR, tool = 'DA-seq')
+        p_daseq <- evaluation_curve(daseq, 'wilcox.adj.BH', AUC_VAR, tool = 'DA-seq')
 
-        ggsave(file.path('figures', 'DAseq_ASC_AUC_curve.png'),
-            p_daseq$plot,
-            device = 'png',
-            width = 7,
-            height = 6)
+        ggsave(file.path('figures', 'DAseq_ASC_AUROC.png'),
+               p_daseq$plot_auroc,
+               device = 'png',
+               width = 7,
+               height = 6)
+            
+        ggsave(file.path('figures', 'DAseq_ASC_AUPRC.png'),
+               p_daseq$plot_auprc,
+               device = 'png',
+               width = 7,
+               height = 6)
 
-        write.table(p_daseq$table, file.path('tables', 'DAseq_ASC_AUC.tsv'), sep = '\t',
+        write.table(p_daseq$table, file.path('tables', 'DAseq_ASC_EVALUATION.tsv'), sep = '\t',
                     row.names = F, quote = F)
 
         ###
 
-        p_daseq_onesided <- auc_curve(daseq, 'fdr_wilcox_onesided', AUC_VAR, tool = 'DA-seq + OS Wilcoxon')
+        p_daseq_onesided <- evaluation_curve(daseq, 'fdr_wilcox_onesided', AUC_VAR, tool = 'DA-seq + OS Wilcoxon')
 
-        ggsave(file.path('figures', 'DAseq_ASC_OS_WILCOX_AUC_curve.png'),
-            p_daseq_onesided$plot,
+        ggsave(file.path('figures', 'DAseq_ASC_OS_WILCOX_AUROC.png'),
+            p_daseq_onesided$plot_auroc,
             device = 'png',
             width = 7,
             height = 6)
 
-        write.table(p_daseq_onesided$table, file.path('tables', 'DAseq_ASC_OS_WILCOX_AUC.tsv'), sep = '\t',
+        ggsave(file.path('figures', 'DAseq_ASC_OS_WILCOX_AUPRC.png'),
+            p_daseq_onesided$plot_auprc,
+            device = 'png',
+            width = 7,
+            height = 6)
+
+        write.table(p_daseq_onesided$table, file.path('tables', 'DAseq_ASC_OS_WILCOX_EVALUATION.tsv'), sep = '\t',
                     row.names = F, quote = F)
 
         ###
 
-        p_daseq_fisher <- auc_curve(daseq, 'p_value_fisher', AUC_VAR, tool = 'DA-seq + Fisher')
+        p_daseq_fisher <- evaluation_curve(daseq, 'p_value_fisher', AUC_VAR, tool = 'DA-seq + Fisher')
 
-        ggsave(file.path('figures', 'DAseq_ASC_FISHER_AUC_curve.png'),
-            p_daseq_fisher$plot,
+        ggsave(file.path('figures', 'DAseq_ASC_FISHER_AUROC.png'),
+            p_daseq_fisher$plot_auroc,
             device = 'png',
             width = 7,
             height = 6)
 
-        write.table(p_daseq_fisher$table, file.path('tables', 'DAseq_ASC_FISHER_AUC.tsv'), sep = '\t',
+        ggsave(file.path('figures', 'DAseq_ASC_FISHER_AUPRC.png'),
+            p_daseq_fisher$plot_auprc,
+            device = 'png',
+            width = 7,
+            height = 6)
+
+        write.table(p_daseq_fisher$table, file.path('tables', 'DAseq_ASC_FISHER_EVALUATION.tsv'), sep = '\t',
                     row.names = F, quote = F)
 
         all_auc_res <- data.frame(tool = c('DA-Seq',
@@ -302,16 +369,22 @@ if (TOOL == 'Milo'){
     if (AUC_VAR != FALSE){
         message('Calculating Milo AUC curve...')
 
-        p_milo <- auc_curve(milo, 'min_nhood_FDR', 
+        p_milo <- evaluation_curve(milo, 'min_nhood_FDR', 
                             AUC_VAR, tool = 'Milo', simplify_p = T)
 
-        ggsave(file.path('figures', 'Milo_ASC_AUC_curve.png'),
-                p_milo$plot,
+        ggsave(file.path('figures', 'Milo_ASC_AUROC.png'),
+                p_milo$plot_auroc,
                 device = 'png',
                 width = 7,
                 height = 6)
 
-        write.table(p_milo$table, file.path('tables', 'Milo_ASC_AUC.tsv'), sep = '\t',
+        ggsave(file.path('figures', 'Milo_ASC_AUPRC.png'),
+                p_milo$plot_auprc,
+                device = 'png',
+                width = 7,
+                height = 6)
+
+        write.table(p_milo$table, file.path('tables', 'Milo_ASC_EVALUATION.tsv'), sep = '\t',
                     row.names = F, quote = F)
         
         all_auc_res <- data.frame(tool = c('Milo'),
@@ -348,28 +421,40 @@ if (TOOL == 'BCRdist'){
     if (AUC_VAR != FALSE){
         message('Calculating BCRdist AUC curves...')
 
-        p_bcrdist_fisher_asc <- auc_curve(bcrdist, 'p_value_fisher', AUC_VAR, tool = 'BCRdist + Fisher')
+        p_bcrdist_fisher_asc <- evaluation_curve(bcrdist, 'p_value_fisher', AUC_VAR, tool = 'BCRdist + Fisher')
 
-        ggsave(file.path('figures', 'BCRdist_ASC_FISHER_AUC_curve.png'),
-            p_bcrdist_fisher_asc$plot,
+        ggsave(file.path('figures', 'BCRdist_ASC_FISHER_AUROC.png'),
+            p_bcrdist_fisher_asc$plot_auroc,
             device = 'png',
             width = 7,
             height = 6)
 
-        write.table(p_bcrdist_fisher_asc$table, file.path('tables', 'BCRdist_ASC_FISHER_AUC.tsv'), sep = '\t',
+        ggsave(file.path('figures', 'BCRdist_ASC_FISHER_AUPRC.png'),
+            p_bcrdist_fisher_asc$plot_auprc,
+            device = 'png',
+            width = 7,
+            height = 6)
+
+        write.table(p_bcrdist_fisher_asc$table, file.path('tables', 'BCRdist_ASC_FISHER_EVALUATION.tsv'), sep = '\t',
                     row.names = F, quote = F)
 
         ###
 
-        p_bcrdist_wilcox_asc <- auc_curve(bcrdist, 'p_value_wilcox', AUC_VAR, tool = 'BCRdist + Wilcoxon')
+        p_bcrdist_wilcox_asc <- evaluation_curve(bcrdist, 'p_value_wilcox', AUC_VAR, tool = 'BCRdist + Wilcoxon')
 
-        ggsave(file.path('figures', 'BCRdist_ASC_WILCOX_AUC_curve.png'),
-            p_bcrdist_wilcox_asc$plot,
+        ggsave(file.path('figures', 'BCRdist_ASC_WILCOX_AUROC.png'),
+            p_bcrdist_wilcox_asc$plot_auroc,
             device = 'png',
             width = 7,
             height = 6)
 
-        write.table(p_bcrdist_wilcox_asc$table, file.path('tables', 'BCRdist_ASC_WILCOX_AUC.tsv'), sep = '\t',
+        ggsave(file.path('figures', 'BCRdist_ASC_WILCOX_AUPRC.png'),
+            p_bcrdist_wilcox_asc$plot_auprc,
+            device = 'png',
+            width = 7,
+            height = 6)
+
+        write.table(p_bcrdist_wilcox_asc$table, file.path('tables', 'BCRdist_ASC_WILCOX_EVALUATION.tsv'), sep = '\t',
                     row.names = F, quote = F)
 
         all_auc_res <- data.frame(tool = c('BCRdist + Fisher',

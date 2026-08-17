@@ -9,7 +9,7 @@ process BCRDIST{
 
     output:
     path "tables/run_stats.tsv", emit: run_stats
-    path "tables/auc_curve_vals_*.tsv", emit: auc_vals, optional: true
+    path "tables/evaluation_curve_vals_*.tsv", emit: auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
     path "tables/bcrdist_clusters.tsv", emit: bcrdist_clusters
     path "tables/cluster_subject_freqs.tsv", emit: cluster_subject_freqs
@@ -55,7 +55,7 @@ process BCRDIST_ASC{
     output:
     tuple val(meta_id), path("tables/*_seq_summary.tsv"), emit: auc_input
     path "tables/run_stats.tsv", emit: run_stats
-    path "tables/auc_curve_vals_*.tsv", emit: auc_vals, optional: true
+    path "tables/evaluation_curve_vals_*.tsv", emit: auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
     path "tables/bcrdist_clusters.tsv", emit: bcrdist_clusters
     path "tables/cluster_subject_freqs.tsv", emit: cluster_subject_freqs

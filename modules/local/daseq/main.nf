@@ -10,7 +10,7 @@ process DASEQ{
     output:
     path "tables/run_stats.tsv", emit: run_stats
     path "tables/da_score_auc_curve_vals.tsv", emit: da_score_auc_vals, optional: true
-    path "tables/p_auc_curve_vals_*.tsv", emit: p_auc_vals, optional: true
+    path "tables/evaluation_curve_vals_*.tsv", emit: p_auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
     path "tables/*_da_seqs.tsv", emit: da_seqs
     path "tables/region_stats.tsv", emit: region_stats
@@ -56,7 +56,7 @@ process DASEQ_ASC{
     tuple val(meta_id), path("tables/*_da_seqs.tsv"), emit: auc_input
     path "tables/run_stats.tsv", emit: run_stats
     path "tables/da_score_auc_curve_vals.tsv", emit: da_score_auc_vals, optional: true
-    path "tables/p_auc_curve_vals_*.tsv", emit: p_auc_vals, optional: true
+    path "tables/evaluation_curve_vals_*.tsv", emit: p_auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
     path "tables/region_stats.tsv", emit: region_stats
     path "tables/cluster_cts.tsv", emit: cluster_cts

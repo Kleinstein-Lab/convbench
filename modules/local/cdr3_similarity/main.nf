@@ -9,7 +9,7 @@ process CDR3_SIMILARITY{
 
     output:
     path "tables/run_stats.tsv", emit: run_stats
-    path "tables/auc_curve_vals_*.tsv", emit: auc_vals, optional: true
+    path "tables/evaluation_curve_vals_*.tsv", emit: auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
     path "tables/*_seq_summary.tsv", emit: seq_summary
     path "tables/cluster_subj_summary.tsv", emit: cluster_subj_summary

@@ -203,21 +203,21 @@ summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count
   
   subj_info <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col), !!sym(count_col)) %>%
-    dplyr::summarise(count_per_cluster = n())
+    dplyr::summarise(count_per_cluster = n(), .groups = "drop_last")
   
   if (var_of_interest == F){
     hit_info <- df_hier_clones %>%
       dplyr::group_by(!!sym(clone_id_col)) %>%
-      dplyr::summarise(hit_seqs = NA)
+      dplyr::summarise(hit_seqs = NA, .groups = "drop")
   } else{
     hit_info <- df_hier_clones %>%
       dplyr::group_by(!!sym(clone_id_col)) %>%
-      dplyr::summarise(hit_seqs = sum(!!sym(var_of_interest) == TRUE))
+      dplyr::summarise(hit_seqs = sum(!!sym(var_of_interest) == TRUE), .groups = "drop")
   }
   
   cluster_cts <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col)) %>%
-    dplyr::summarise(total_cluster_seqs = n())
+    dplyr::summarise(total_cluster_seqs = n(), .groups = "drop")
   
   all_df <- cluster_cts %>%
     dplyr::left_join(subj_info, by = clone_id_col) %>%
@@ -271,7 +271,7 @@ make_fisher_overview_plot <- function(fisher_table, df_hier_clones, level, condi
   # get seqs per cluster
   seq_count_df <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col)) %>%
-    summarise(seq_count = n())
+    summarise(seq_count = n(), .groups = "drop")
   
   # add seqs per cluster to fisher exact table
   df_plot <- fisher_table %>%
@@ -395,6 +395,25 @@ make_auc_curve <- function(results_table, seq_table, p_val_col, cluster_id_col, 
          height = 6)
 
   return(auroc)
+}
+
+calc_FDR <- function(results_table, p_val_col, auc_variable, alpha){
+  # results table = table containing some kind of test result (Fisher Exact, Wilcox, etc.).
+  #                 If rows are sequences, sequence-level FDR is calculated.
+  #                 If rows are clusters, cluster-level FDR is calculated.
+  # p_val_col = the column you want to apply the p-value or FDR threshold to
+  # auc_variable = variable to use for getting positives
+
+  # get all significant
+  results_filtered <- results_table %>%
+    dplyr::filter(!is.na(!!sym(p_val_col))) %>%
+    dplyr::filter(!!sym(p_val_col) < alpha)
+
+  # mean = TP / (TP + FP). We want FP / (TP + FP), which is 1 - (TP/(TP+FP))
+  FDR <- 1 - mean(results_filtered[[auc_variable]])
+
+  return(FDR)
+
 }
 
 ########################
@@ -1034,38 +1053,81 @@ if (AUC_VAR != FALSE){
     true_neg <- sum(da.cell.list == F & min_p_nhoods_df[[AUC_VAR]] == F)
     false_pos <- sum(da.cell.list == T & min_p_nhoods_df[[AUC_VAR]] == F)
     
+    # AUROC
     TPR <- true_pos / (true_pos + false_neg)
     FPR <- 1 - (true_neg / (true_neg + false_pos))
     
+    # FDR
+    FDR <- false_pos / (false_pos + true_pos)
+
+    # AUPRC
+    precision <- true_pos / (false_pos + true_pos)
+
     return(data.frame('TPR' = TPR,
-                      'FPR' = FPR))
+                      'FPR' = FPR,
+                      'Precision' = precision,
+                      'FDR' = FDR,
+                      'TP' = true_pos,
+                      'FP' = false_pos,
+                      'TN' = true_neg,
+                      'FN' = false_neg
+                      ))
     
   })
   
   auc_df <- do.call(rbind, auc_data)
   auc_df$spatialFDR_threshold <- auc_thresholds
   
+  # estimate the first precision point - it should always be NA b/c no false or true positives below the first threshold
+  if (is.na(auc_df[1,'Precision']) & nrow(auc_df) > 1){
+    auc_df[1,'Precision'] <- auc_df[2,'Precision']
+  }
+
   write.table(auc_df, 
-              file.path(OUTPUT_DIR, 'tables', 'auc_curve_vals.tsv'), 
+              file.path(OUTPUT_DIR, 'tables', 'evaluation_curve_vals.tsv'), 
               sep = '\t', row.names = F, quote = F)
   
   # get auroc
   auroc <- pracma::trapz(auc_df$FPR, auc_df$TPR)
+
+  # get auprc
+  auprc <- pracma::trapz(auc_df$TPR, auc_df$Precision)
   
   auc_df %>%
     ggplot(aes(x = FPR, y = TPR)) +
     geom_point() +
     geom_line() +
     labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
-         subtitle = paste0('AUC: ', round(auroc, 3), '; ', 
+         subtitle = paste0('AUROC: ', round(auroc, 3), '; ', 
                            prettyNum(sum(valid_cells), big.mark = ",", scientific = FALSE), '/', 
                            prettyNum(total_cells, big.mark = ",", scientific = FALSE), ' cells in DA neighborhoods')) + 
     theme_minimal()
   
-  ggsave(file.path(OUTPUT_DIR, 'figures', 'AUC_curve.png'),
+  ggsave(file.path(OUTPUT_DIR, 'figures', 'AUROC.png'),
          device = 'png',
          width = 7,
          height = 6)
+
+  # PRC
+  auc_df %>%
+    ggplot(aes(x = TPR, y = Precision)) +
+    geom_point() +
+    geom_line() +
+    labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
+         subtitle = paste0('AUPRC: ', round(auprc, 3), '; ', 
+                           prettyNum(sum(valid_cells), big.mark = ",", scientific = FALSE), '/', 
+                           prettyNum(total_cells, big.mark = ",", scientific = FALSE), ' cells in DA neighborhoods'),
+         x = 'Recall') + 
+    theme_minimal() +
+    scale_y_continuous(limits = c(0, 1))
+  
+  ggsave(file.path(OUTPUT_DIR, 'figures', 'AUPRC.png'),
+         device = 'png',
+         width = 7,
+         height = 6)
+
+  # FDR
+  FDR <- calc_FDR(min_p_nhoods_df, 'min_nhood_FDR', AUC_VAR, 0.05)
   
   ###########
   # JACCARD #
@@ -1116,6 +1178,8 @@ if (AUC_VAR != FALSE){
          height = 5)
 } else{
   auroc <- NA
+  auprc <- NA
+  FDR <- NA
 }
 
 ################################################################################
@@ -1293,10 +1357,14 @@ if (AUC_VAR != FALSE){
   stat_table$Jaccard_0.1 = jaccard_1
   stat_table$Jaccard_max = Jaccard_max
   stat_table$Jaccard_max_p = Jaccard_max_p
-  stat_table$AUC <- c(auroc)
+  stat_table$AUROC <- c(auroc)
+  stat_table$AUPRC <- c(auprc)
+  stat_table$FDR <- c(FDR)
   
   stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
-                             'num_hit_clusters', 'avg_pct_hits', 'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
+                             'num_hit_clusters', 'avg_pct_hits',
+                             'AUROC', 'AUPRC', 'FDR', 
+                             'Jaccard_0.005', 'Jaccard_0.05',
                              'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                              'time (min)', 'subjects', 'depths')]
 }

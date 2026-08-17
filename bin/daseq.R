@@ -326,13 +326,13 @@ do_wilcox_test <- function(results_df, da_variable, disease_group, cluster_col, 
   if(is.null(subject_depths)){
     subject_depths <- results_df %>%
       dplyr::group_by(subject_id, !!sym(da_variable)) %>%
-      dplyr::summarize(depth = n())
+      dplyr::summarize(depth = n(), .groups = "drop_last")
   }
 
   # Cluster frequencies per subject
   cluster_subject_freqs <- results_df %>%
     dplyr::group_by(!!sym(cluster_col), subject_id) %>%
-    dplyr::summarize(cluster_sequences = n()) %>%
+    dplyr::summarize(cluster_sequences = n(), .groups = "drop_last") %>%
     dplyr::left_join(subject_depths, by = 'subject_id') %>%
     dplyr::mutate(normalized_freq = cluster_sequences / depth) %>%
     tidyr::pivot_wider(id_cols = cluster_col, 
@@ -422,7 +422,7 @@ make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq
 
 }
 
-make_auc_curve <- function(seq_table, p_val_col, cluster_id_col, auc_variable, name){
+evaluate_results <- function(seq_table, p_val_col, cluster_id_col, auc_variable, name){
   # seq_table = table containing sequence-level information including auc_variable and cluster_id_col
   #             used to identify the correct category for each sequence. Also assumes p-values are already
   #             linked to sequences in this table
@@ -457,19 +457,34 @@ make_auc_curve <- function(seq_table, p_val_col, cluster_id_col, auc_variable, n
     false_pos <- sum(DA_cells[[auc_variable]] == FALSE)
     
     return(data.frame('TPR' = true_pos / (true_pos + false_neg),
-                      'FPR' = 1 - (true_neg / (true_neg + false_pos))))
+                      'FPR' = 1 - (true_neg / (true_neg + false_pos)),
+                      'Precision' = true_pos / (false_pos + true_pos),
+                      'FDR' = false_pos / (false_pos + true_pos),
+                      'TP' = true_pos,
+                      'FP' = false_pos,
+                      'TN' = true_neg,
+                      'FN' = false_neg
+                      ))
     
   })
   
   p_auc_df <- do.call(rbind, p_auc_data)
   p_auc_df$da_score_threshold <- p_auc_thresholds
+
+  # estimate the first precision point - it should always be NA b/c no false or true positives below the first threshold
+  if (is.na(p_auc_df[1,'Precision']) & nrow(p_auc_df) > 1){
+    p_auc_df[1,'Precision'] <- p_auc_df[2,'Precision']
+  }
   
   write.table(p_auc_df, 
-              file.path(OUTPUT_DIR, 'tables', paste0('p_auc_curve_vals_', name, '.tsv')), 
+              file.path(OUTPUT_DIR, 'tables', paste0('evaluation_curve_vals_', name, '.tsv')), 
               sep = '\t', row.names = F, quote = F)
   
   # get auroc
   p_auroc <- pracma::trapz(p_auc_df$FPR, p_auc_df$TPR)
+
+  # get auprc
+  p_auprc <- pracma::trapz(p_auc_df$TPR, p_auc_df$Precision)
   
   pretty_name <- stringr::str_replace_all(name, '_', ' ')
 
@@ -480,17 +495,55 @@ make_auc_curve <- function(seq_table, p_val_col, cluster_id_col, auc_variable, n
     labs(x = 'FPR',
          y = 'TPR',
          title = paste0(pretty_name, ' threshold ', round(min(p_auc_thresholds)), ' to ', round(max(p_auc_thresholds), 3)),
-         subtitle = paste0(pretty_name, ' AUC: ', round(p_auroc, 3), '; ', 
+         subtitle = paste0(pretty_name, ' AUROC: ', round(p_auroc, 3), '; ', 
                            prettyNum(assigned_cells, big.mark = ",", scientific = FALSE), '/', 
                            prettyNum(total_cells, big.mark = ",", scientific = FALSE), ' cells in DA clusters')) + 
     theme_minimal()
   
-  ggsave(file.path(OUTPUT_DIR, 'figures', paste0('AUC_curve_', name, '.png')),
+  ggsave(file.path(OUTPUT_DIR, 'figures', paste0('AUROC_', name, '.png')),
          device = 'png',
          width = 7,
          height = 6)
 
-  return(p_auroc)
+  p_auc_df %>%
+    ggplot(aes(x = TPR, y = Precision)) +
+    geom_point() +
+    geom_line() +
+    labs(x = 'Recall',
+         y = 'Precision',
+         title = paste0(pretty_name, ' threshold ', round(min(p_auc_thresholds)), ' to ', round(max(p_auc_thresholds), 3)),
+         subtitle = paste0(pretty_name, ' AUPRC: ', round(p_auprc, 3), '; ', 
+                           prettyNum(assigned_cells, big.mark = ",", scientific = FALSE), '/', 
+                           prettyNum(total_cells, big.mark = ",", scientific = FALSE), ' cells in DA clusters')) + 
+    theme_minimal() +
+    scale_y_continuous(limits = c(0, 1))
+
+  ggsave(file.path(OUTPUT_DIR, 'figures', paste0('AUPRC_', name, '.png')),
+        device = 'png',
+        width = 7,
+        height = 6)
+
+  return(list('AUROC' = p_auroc,
+              'AUPRC' = p_auprc))
+
+}
+
+calc_FDR <- function(results_table, p_val_col, auc_variable, alpha){
+  # results table = table containing some kind of test result (Fisher Exact, Wilcox, etc.).
+  #                 If rows are sequences, sequence-level FDR is calculated.
+  #                 If rows are clusters, cluster-level FDR is calculated.
+  # p_val_col = the column you want to apply the p-value or FDR threshold to
+  # auc_variable = variable to use for getting positives
+
+  # get all significant
+  results_filtered <- results_table %>%
+    dplyr::filter(!is.na(!!sym(p_val_col))) %>%
+    dplyr::filter(!!sym(p_val_col) < alpha)
+
+  # mean = TP / (TP + FP). We want FP / (TP + FP), which is 1 - (TP/(TP+FP))
+  FDR <- 1 - mean(results_filtered[[auc_variable]])
+
+  return(FDR)
 
 }
 
@@ -1302,17 +1355,26 @@ if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   # ALTERNATIVE AUC CALCUATION #
   ##############################
   # do AUC curve with the Fisher Exact results
-  fisher_auc <- make_auc_curve(X.cells, 'p_value_fisher', 'da.region.label', AUC_VAR, 'Fisher')
+  fisher_auc <- evaluate_results(X.cells, 'p_value_fisher', 'da.region.label', AUC_VAR, 'Fisher')
 
   # do AUC curve with the Wilcoxon results
-  wilcox_auc <- make_auc_curve(X.cells, 'wilcox.adj.BH', 'da.region.label', AUC_VAR, 'Wilcoxon')
+  wilcox_auc <- evaluate_results(X.cells, 'wilcox.adj.BH', 'da.region.label', AUC_VAR, 'Wilcoxon')
   
   # also do AUC curve with the one-sided Wilcoxon results
-  wilcox_onesided_auc <- make_auc_curve(X.cells, 'fdr_wilcox_onesided', 'da.region.label', AUC_VAR, 'One-Sided_Wilcoxon')
+  wilcox_onesided_auc <- evaluate_results(X.cells, 'fdr_wilcox_onesided', 'da.region.label', AUC_VAR, 'One-Sided_Wilcoxon')
 
-  stat_table[1, 'AUC'] <- c(wilcox_auc)
-  stat_table[2, 'AUC'] <- c(fisher_auc)
-  stat_table[3, 'AUC'] <- c(wilcox_onesided_auc)
+  stat_table[1, 'AUROC'] <- c(fisher_auc$AUROC)
+  stat_table[2, 'AUROC'] <- c(wilcox_auc$AUROC)
+  stat_table[3, 'AUROC'] <- c(wilcox_onesided_auc$AUROC)
+
+  stat_table[1, 'AUPRC'] <- c(fisher_auc$AUPRC)
+  stat_table[2, 'AUPRC'] <- c(wilcox_auc$AUPRC)
+  stat_table[3, 'AUPRC'] <- c(wilcox_onesided_auc$AUPRC)
+
+  # get FDR at 0.05 cutoff for FDR
+  stat_table[1, 'FDR'] <- calc_FDR(X.cells, 'fdr_fisher', AUC_VAR, 0.05)
+  stat_table[2, 'FDR'] <- calc_FDR(X.cells, 'wilcox.adj.BH', AUC_VAR, 0.05)
+  stat_table[3, 'FDR'] <- c(X.cells, 'fdr_wilcox_onesided', AUC_VAR, 0.05)
   
   ###########
   # JACCARD #
@@ -1379,12 +1441,12 @@ if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
 subj_cts <- X.cells %>%
   dplyr::select('subject_id', 'da.region.label') %>%
   dplyr::group_by(da.region.label, subject_id) %>%
-  dplyr::summarise(seqs_per_subj = n()) %>%
+  dplyr::summarise(seqs_per_subj = n(), .groups = "drop_last") %>%
   dplyr::filter(da.region.label != 0)
 
 cluster_cts <- X.cells %>%
   dplyr::group_by(da.region.label) %>%
-  dplyr::summarise(seqs_per_cluster = n())
+  dplyr::summarise(seqs_per_cluster = n(), .groups = "drop")
 
 subj_cts <- dplyr::left_join(subj_cts, cluster_cts, by = 'da.region.label')
 
@@ -1398,7 +1460,7 @@ if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   hit_cts <- X.cells %>%
     dplyr::select('da.region.label', AUC_VAR) %>%
     dplyr::group_by(da.region.label) %>%
-    dplyr::summarise(hit_seqs = sum(!!sym(AUC_VAR) == TRUE)) %>%
+    dplyr::summarise(hit_seqs = sum(!!sym(AUC_VAR) == TRUE), .groups = "drop") %>%
     dplyr::filter(da.region.label != 0)
   
   hit_cts$da.region.label <- as.character(hit_cts$da.region.label)
@@ -1447,7 +1509,8 @@ if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   stat_table$Jaccard_max_p = c(Jaccard_max_p, NA, NA)
   
   stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
-                             'num_hit_clusters', 'avg_pct_hits', 'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
+                             'num_hit_clusters', 'avg_pct_hits', 'AUROC', 'AUPRC', 'FDR', 
+                             'Jaccard_0.005', 'Jaccard_0.05',
                              'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                              'time (min)', 'subjects', 'depths')]
 }
