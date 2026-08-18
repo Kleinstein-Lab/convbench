@@ -12,6 +12,7 @@ process MILO{
     path "tables/evaluation_curve_vals.tsv", emit: auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
     path "tables/*_seq_results.tsv", emit: seq_results
+    path "tables/min_p_nhoods.tsv", emit: min_p_nhoods
     path "tables/da_results.tsv", emit: da_results
     path "tables/nhood_stats.tsv", emit: nhood_stats
     path "tables/milo_nhoods.RDS", emit: milo_nhoods, optional: true
@@ -46,6 +47,7 @@ process MILO_ASC{
 
     output:
     tuple val(meta_id), path("tables/*_seq_results.tsv"), emit: auc_input
+    path "tables/min_p_nhoods.tsv", emit: min_p_nhoods
     path "tables/run_stats.tsv", emit: run_stats
     path "tables/evaluation_curve_vals.tsv", emit: auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true

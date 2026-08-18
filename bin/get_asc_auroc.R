@@ -173,6 +173,25 @@ evaluation_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
   
 }
 
+calc_FDR <- function(results_table, p_val_col, auc_variable, alpha){
+  # results table = table containing some kind of test result (Fisher Exact, Wilcox, etc.).
+  #                 If rows are sequences, sequence-level FDR is calculated.
+  #                 If rows are clusters, cluster-level FDR is calculated.
+  # p_val_col = the column you want to apply the p-value or FDR threshold to
+  # auc_variable = variable to use for getting positives
+
+  # get all significant
+  results_filtered <- results_table %>%
+    dplyr::filter(!is.na(!!sym(p_val_col))) %>%
+    dplyr::filter(!!sym(p_val_col) < alpha)
+
+  # mean = TP / (TP + FP). We want FP / (TP + FP), which is 1 - (TP/(TP+FP))
+  FDR <- 1 - mean(results_filtered[[auc_variable]])
+
+  return(FDR)
+
+}
+
 ####################
 ### load results ###
 ####################
@@ -200,6 +219,19 @@ if (TOOL ==  'cdr3_similarity'){
     
     cdr3_sim <- cdr3_sim %>%
       dplyr::rename(sequence_id = id_col)
+
+    # get new corrected p-values
+    cluster_results <- cdr3_sim[c('convergent_clone_id_full', 'p_value_fisher', 'p_value_wilcox')] %>% distinct()
+
+    # get correction for aggregated result
+    cluster_results$agg_fdr_fisher <- p.adjust(cluster_results$p_value_fisher, method = 'BH')
+    cluster_results$agg_fdr_wilcox <- p.adjust(cluster_results$p_value_wilcox, method = 'BH')
+
+    # add back
+    cdr3_sim <- cdr3_sim %>%
+      dplyr::left_join(cluster_results[c('convergent_clone_id_full', 'agg_fdr_fisher', 'agg_fdr_wilcox')], 
+                       by = 'convergent_clone_id_full',
+                       relationship = 'many-to-one')
     
     readr::write_tsv(cdr3_sim, file.path('tables', 'combined_res.tsv.gz'))
 
@@ -244,11 +276,15 @@ if (TOOL ==  'cdr3_similarity'){
                     row.names = F, quote = F)
 
         all_auc_res <- data.frame(tool = c('CDRH3 Similarity + Fisher',
-                                        'CDRH3 Similarity + Wilcoxon'),
-                                AUC = c(p_cdr3_fisher_asc$auroc,
-                                        p_cdr3_wilcox_asc$auroc))
+                                           'CDRH3 Similarity + Wilcoxon'),
+                                  AUROC = c(p_cdr3_fisher_asc$auroc,
+                                            p_cdr3_wilcox_asc$auroc),
+                                  AUPRC = c(p_cdr3_fisher_asc$auprc,
+                                            p_cdr3_wilcox_asc$auprc),
+                                  FDR = c(calc_FDR(cdr3_sim, 'agg_fdr_fisher', AUC_VAR, 0.05),
+                                          calc_FDR(cdr3_sim, 'agg_fdr_wilcox', AUC_VAR, 0.05)))
 
-        write_tsv(all_auc_res, file.path('tables', 'ASC_AUC_summary.tsv'))
+        write_tsv(all_auc_res, file.path('tables', 'ASC_evaluation_summary.tsv'))
     }
 }
 
@@ -270,6 +306,22 @@ if (TOOL == 'DA-seq'){
     })
     
     daseq <- do.call(rbind, res_files)
+
+    # get new corrected p-values
+    cluster_results <- daseq[c('da.region.label.full', 'pval.wilcoxon', 'pval.ttest', 'p_value_fisher', 'p_value_wilcox_onesided')] %>% distinct()
+
+    # get correction for aggregated result
+    cluster_results$agg_fdr_fisher <- p.adjust(cluster_results$p_value_fisher, method = 'BH')
+    cluster_results$agg_fdr_wilcox <- p.adjust(cluster_results$pval.wilcoxon, method = 'BH')
+    cluster_results$agg_fdr_ttest <- p.adjust(cluster_results$pval.ttest, method = 'BH')
+    cluster_results$agg_fdr_wilco_onesided <- p.adjust(cluster_results$p_value_wilcox_onesided, method = 'BH')
+
+    # add back
+    daseq <- daseq %>%
+      dplyr::left_join(cluster_results[c('da.region.label.full', 'agg_fdr_fisher', 'agg_fdr_wilcox', 
+                                        'agg_fdr_ttest', 'agg_fdr_wilco_onesided')], 
+                       by = 'da.region.label.full',
+                       relationship = 'many-to-one')
     
     readr::write_tsv(daseq, file.path('tables', 'combined_res.tsv.gz'))
 
@@ -332,13 +384,19 @@ if (TOOL == 'DA-seq'){
                     row.names = F, quote = F)
 
         all_auc_res <- data.frame(tool = c('DA-Seq',
-                                        'DA-Seq + Fisher',
-                                        'DA-Seq + One-sided Wilcoxon'),
-                                AUC = c(p_daseq$auroc,
-                                        p_daseq_fisher$auroc,
-                                        p_daseq_onesided$auroc))
+                                           'DA-Seq + Fisher',
+                                           'DA-Seq + One-sided Wilcoxon'),
+                                  AUROC = c(p_daseq$auroc,
+                                            p_daseq_fisher$auroc,
+                                            p_daseq_onesided$auroc),
+                                  AUPRC = c(p_daseq$auprc,
+                                            p_daseq_fisher$auprc,
+                                            p_daseq_onesided$auprc),
+                                  FDR = c(calc_FDR(daseq, 'agg_fdr_wilcox', AUC_VAR, 0.05),
+                                          calc_FDR(daseq, 'agg_fdr_fisher', AUC_VAR, 0.05),
+                                          calc_FDR(daseq, 'agg_fdr_wilco_onesided', AUC_VAR, 0.05)))
 
-        write_tsv(all_auc_res, file.path('tables', 'ASC_AUC_summary.tsv'))
+        write_tsv(all_auc_res, file.path('tables', 'ASC_evaluation_summary.tsv'))
     }
 }
 
@@ -354,7 +412,7 @@ if (TOOL == 'Milo'){
 
       df <- df %>%
         dplyr::mutate(ASC = asc_id,
-                      min_nhood_id = paste0(ASC, '_', min_nhood_id))
+                      nhood_id = paste0(ASC, '_', nhood_id))
 
       return(df)
     })
@@ -363,14 +421,28 @@ if (TOOL == 'Milo'){
     
     milo <- milo %>%
       dplyr::rename(sequence_id = id_col)
+
+    # get new corrected p-values on ALL nhoods (not just ones in min_nhood_ID)
+    cluster_results <- milo %>%
+                        dplyr::filter(!is.na(nhood_id)) %>%
+                        dplyr::select(c('nhood_id', 'PValue')) %>% 
+                        distinct()
+
+    # get correction for aggregated result
+    cluster_results$agg_fdr <- p.adjust(cluster_results$PValue, method = 'BH')
+
+    # add back
+    milo <- milo %>%
+      dplyr::left_join(cluster_results[c('nhood_id', 'agg_fdr')], 
+                       by = 'nhood_id', relationship = 'many-to-one')
     
     readr::write_tsv(milo, file.path('tables', 'combined_res.tsv.gz'))
 
     if (AUC_VAR != FALSE){
         message('Calculating Milo AUC curve...')
 
-        p_milo <- evaluation_curve(milo, 'min_nhood_FDR', 
-                            AUC_VAR, tool = 'Milo', simplify_p = T)
+        p_milo <- evaluation_curve(milo %>% dplyr::filter(!is.na(sequence_id)), 'min_nhood_FDR', 
+                                  AUC_VAR, tool = 'Milo', simplify_p = T)
 
         ggsave(file.path('figures', 'Milo_ASC_AUROC.png'),
                 p_milo$plot_auroc,
@@ -388,9 +460,12 @@ if (TOOL == 'Milo'){
                     row.names = F, quote = F)
         
         all_auc_res <- data.frame(tool = c('Milo'),
-                                AUC = c(p_milo$auroc))
+                                  AUROC = c(p_milo$auroc),
+                                  AUPRC = c(p_milo$auprc),
+                                  FDR = c(calc_FDR(milo %>% dplyr::filter(!is.na(sequence_id)), 
+                                                  'agg_fdr', AUC_VAR, 0.05)))
 
-        write_tsv(all_auc_res, file.path('tables', 'ASC_AUC_summary.tsv'))
+        write_tsv(all_auc_res, file.path('tables', 'ASC_evaluation_summary.tsv'))
     }
 } 
 
@@ -415,6 +490,19 @@ if (TOOL == 'BCRdist'){
     
     bcrdist <- bcrdist %>%
       dplyr::rename(sequence_id = id_col)
+    
+    # get new corrected p-values
+    cluster_results <- bcrdist[c('convergent_clone_id_full', 'p_value_fisher', 'p_value_wilcox')] %>% distinct()
+
+    # get correction for aggregated result
+    cluster_results$agg_fdr_fisher <- p.adjust(cluster_results$p_value_fisher, method = 'BH')
+    cluster_results$agg_fdr_wilcox <- p.adjust(cluster_results$p_value_wilcox, method = 'BH')
+
+    # add back
+    bcrdist <- bcrdist %>%
+      dplyr::left_join(cluster_results[c('convergent_clone_id_full', 'agg_fdr_fisher', 'agg_fdr_wilcox')], 
+                       by = 'convergent_clone_id_full',
+                       relationship = 'many-to-one')
     
     readr::write_tsv(bcrdist, file.path('tables', 'combined_res.tsv.gz'))
 
@@ -458,11 +546,15 @@ if (TOOL == 'BCRdist'){
                     row.names = F, quote = F)
 
         all_auc_res <- data.frame(tool = c('BCRdist + Fisher',
-                                        'BCRdist + Wilcoxon'),
-                                AUC = c(p_bcrdist_fisher_asc$auroc,
-                                        p_bcrdist_wilcox_asc$auroc))
+                                           'BCRdist + Wilcoxon'),
+                                  AUROC = c(p_bcrdist_fisher_asc$auroc,
+                                            p_bcrdist_wilcox_asc$auroc),
+                                  AUPRC = c(p_bcrdist_fisher_asc$auprc,
+                                            p_bcrdist_wilcox_asc$auprc),
+                                  FDR = c(calc_FDR(bcrdist, 'agg_fdr_fisher', AUC_VAR, 0.05),
+                                          calc_FDR(bcrdist, 'agg_fdr_wilcox', AUC_VAR, 0.05)))
 
-        write_tsv(all_auc_res, file.path('tables', 'ASC_AUC_summary.tsv'))
+        write_tsv(all_auc_res, file.path('tables', 'ASC_evaluation_summary.tsv'))
     }
 }
 

@@ -965,17 +965,22 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', paste(MD_NAME, '_seq_results.ts
       result <- NA
       min_p_clust <- NA
       min_p_logFC <- NA
+      min_p_PVal <- NA
     } else{
       result <- min(test)
       min_p_clust <- names(which.min(test))
       min_p_logFC <- da_results %>% 
         dplyr::filter(nhood_id == min_p_clust) %>% 
         dplyr::pull(logFC)
+      min_p_PVal <- da_results %>% 
+        dplyr::filter(nhood_id == min_p_clust) %>% 
+        dplyr::pull(PValue)
     }
     
     return(data.frame('id_col' = current_seq,
                       'min_nhood_id' = min_p_clust,
                       'min_nhood_FDR' = result,
+                      'min_nhood_PValue' = min_p_PVal,
                       'min_nhood_logFC' = min_p_logFC
     ))
     
@@ -987,8 +992,16 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', paste(MD_NAME, '_seq_results.ts
     min_p_nhoods_df <- min_p_nhoods_df %>%
       dplyr::left_join(md_reduced[c('id_col', AUC_VAR)], by = 'id_col')
   }
-  
+
   write.table(min_p_nhoods_df, 
+              file.path(OUTPUT_DIR, 'tables', 'min_p_nhoods.tsv'),
+              sep = '\t', row.names = F, quote = F)
+  
+  # create a version with ALL results included (so we can reference all the neighborhoods)
+  min_p_nhoods_df_merge <- da_results %>%
+    full_join(min_p_nhoods_df, by = join_by(nhood_id == min_nhood_id), relationship = 'one-to-many', na_matches = 'never')
+
+  write.table(min_p_nhoods_df_merge, 
               file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, '_seq_results.tsv')), 
               sep = '\t', row.names = F, quote = F)
 } else{
