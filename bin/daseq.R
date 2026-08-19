@@ -1123,10 +1123,11 @@ tryCatch({
 }, error = function(e){
   
   warning('No DA regions found. Run ended without completing final analysis.')
+  message('Associated error message: ', e$message)
   message(paste0('Finishing run: ', Sys.time()))
   print(sessionInfo())
   
-  stop(e)
+  quit(save = 'no', status = 0)
   
 })
 
