@@ -1122,6 +1122,40 @@ tryCatch({
   
 }, error = function(e){
   
+  # write a dummy result
+  if (AUC_VAR != FALSE){
+    dummy_data <- data.frame(matrix(ncol = 18, nrow = 0))
+    colnames(dummy_data) <- c('subject_id',  'sample_id', 'sequence_id',
+                              'da.region.label', 'v_gene', 'j_gene', AUC_VAR,
+                              DA_VAR, 'pred', 'DA.score', 'pval.wilcoxon',
+                              'pval.ttest', 'wilcox.adj.BH', 'ttest.adj.BH',
+                              'p_value_fisher', 'fdr_fisher', 'p_value_wilcox_onesided',
+                              'fdr_wilcox_onesided') 
+  } else{
+    dummy_data <- data.frame(matrix(ncol = 17, nrow = 0))
+    colnames(dummy_data) <- c('subject_id',  'sample_id', 'sequence_id',
+                              'da.region.label', 'v_gene', 'j_gene',
+                              DA_VAR, 'pred', 'DA.score', 'pval.wilcoxon',
+                              'pval.ttest', 'wilcox.adj.BH', 'ttest.adj.BH',
+                              'p_value_fisher', 'fdr_fisher', 'p_value_wilcox_onesided',
+                              'fdr_wilcox_onesided') 
+  }
+
+
+  write.table(dummy_data, 
+              file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, '_da_seqs.tsv')), 
+              sep='\t', quote = F, row.names = F)
+  
+  # make a stat table
+  time_taken <-  Sys.time() - start_time
+  stat_table <- data.frame('tool' = c('DAseq', 'DAseq + Fisher', 'DAseq + One-sided Wilcoxon'),
+                           'total_seqs' = nrow(X.cells),
+                           'total_subj' = length(unique(X.cells$subject_id)),
+                           'time (min)' = as.numeric(time_taken, units = "mins"),
+                           'subjects' = paste(names(table(X.cells$subject_id)), collapse = ', '),
+                           'depths' = paste(table(X.cells$subject_id), collapse = ', '),
+                           check.names = F)
+
   warning('No DA regions found. Run ended without completing final analysis.')
   message('Associated error message: ', e$message)
   message(paste0('Finishing run: ', Sys.time()))
