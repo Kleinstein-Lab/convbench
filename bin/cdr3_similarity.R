@@ -408,6 +408,9 @@ evaluate_results <- function(results_table, seq_table, p_val_col, cluster_id_col
   # auc_variable = variable to use for getting positives in the AUC curve
   # name = a name to specify for saving figures and tables (i.e. the name of the test)
 
+  # get AUPRC baseline - fraction of positive events
+  auprc_baseline <- mean(seq_table[[auc_variable]], na.rm = T)
+
   auc_thresholds <- sort(unique(results_table[[p_val_col]]))
   
   # add to the largest to make sure the entire curve is captured
@@ -479,6 +482,7 @@ evaluate_results <- function(results_table, seq_table, p_val_col, cluster_id_col
   # ROC
   auc_df %>%
     ggplot(aes(x = FPR, y = TPR)) +
+    geom_abline(slope = 1, intercept = 0, color = 'gray') +
     geom_point() +
     geom_line() +
     labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
@@ -493,6 +497,7 @@ evaluate_results <- function(results_table, seq_table, p_val_col, cluster_id_col
   # PRC
   auc_df %>%
     ggplot(aes(x = TPR, y = Precision)) +
+    geom_hline(yintercept = auprc_baseline, color = 'red', linetype = 'dashed') +
     geom_point() +
     geom_line() +
     labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),

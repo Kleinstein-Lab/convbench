@@ -57,6 +57,9 @@ if (!dir.exists('figures')){
 
 evaluation_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
   
+  # get AUPRC baseline - fraction of positive events
+  auprc_baseline <- mean(res[[binder_col]], na.rm = T)
+
   invalid_seqs <- sum(is.na(res[[p_col]]))
   total_seqs <- nrow(res)
   valid_seqs <- total_seqs - invalid_seqs
@@ -83,7 +86,7 @@ evaluation_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
   tot_thresh <- length(auc_thresholds)
   auc_thresholds[tot_thresh] <- auc_thresholds[tot_thresh] + 1e-3
   
-  # get binder info
+  # get binder info (or whatever the AUC var is)
   binder <- res[[binder_col]] == T
   nonbinder <- res[[binder_col]] == F
   
@@ -144,6 +147,7 @@ evaluation_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
   
   p_auroc <- auc_df %>%
     ggplot(aes(x = FPR, y = TPR)) +
+    geom_abline(slope = 1, intercept = 0, color = 'gray') +
     geom_point(size = 1.25) +
     geom_line() +
     labs(title = title_auroc,
@@ -156,6 +160,7 @@ evaluation_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
 
   p_auprc <- auc_df %>%
     ggplot(aes(x = TPR, y = Precision)) +
+    geom_hline(yintercept = auprc_baseline, color = 'red', linetype = 'dashed') +
     geom_point(size = 1.25) +
     geom_line() +
     labs(title = title_auprc,

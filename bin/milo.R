@@ -1045,7 +1045,9 @@ if (AUC_VAR != FALSE){
       dplyr::left_join(md_reduced[c('id_col', AUC_VAR)])
   }
 
-  
+  # get auprc baseline
+  auprc_baseline <- mean(min_p_nhoods_df[[AUC_VAR]], na.rm = T)
+
   auc_thresholds <- sort(unique(min_p_nhoods_df$min_nhood_FDR))
   # auc_thresholds <- quantile(min_p_nhoods_df$min_nhood_FDR, seq(0, 1, 0.01), names=F)
   # auc_thresholds <- quantile(min_p_nhoods_df$min_nhood_FDR, seq(0, 1, 0.01), names=F)
@@ -1108,6 +1110,7 @@ if (AUC_VAR != FALSE){
   
   auc_df %>%
     ggplot(aes(x = FPR, y = TPR)) +
+    geom_abline(slope = 1, intercept = 0, color = 'gray') +
     geom_point() +
     geom_line() +
     labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
@@ -1124,6 +1127,7 @@ if (AUC_VAR != FALSE){
   # PRC
   auc_df %>%
     ggplot(aes(x = TPR, y = Precision)) +
+    geom_hline(yintercept = auprc_baseline, color = 'red', linetype = 'dashed') +
     geom_point() +
     geom_line() +
     labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),

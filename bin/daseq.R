@@ -430,6 +430,10 @@ evaluate_results <- function(seq_table, p_val_col, cluster_id_col, auc_variable,
   # cluster_id_col = IDs specifying clusters that were tested
   # auc_variable = variable to use for getting positives in the AUC curve
   # name = a name to specify for saving figures and tables (i.e. the name of the test)
+
+  # get AUPRC baseline - fraction of positive events
+  auprc_baseline <- mean(seq_table[[auc_variable]], na.rm = T)
+
   total_cells <- nrow(seq_table)
   unassigned_cells <- sum(is.na(seq_table[[p_val_col]]))
   assigned_cells <- total_cells - unassigned_cells
@@ -490,6 +494,7 @@ evaluate_results <- function(seq_table, p_val_col, cluster_id_col, auc_variable,
 
   p_auc_df %>%
     ggplot(aes(x = FPR, y = TPR)) +
+    geom_abline(slope = 1, intercept = 0, color = 'gray') +
     geom_point() +
     geom_line() +
     labs(x = 'FPR',
@@ -507,6 +512,7 @@ evaluate_results <- function(seq_table, p_val_col, cluster_id_col, auc_variable,
 
   p_auc_df %>%
     ggplot(aes(x = TPR, y = Precision)) +
+    geom_hline(yintercept = auprc_baseline, color = 'red', linetype = 'dashed') +
     geom_point() +
     geom_line() +
     labs(x = 'Recall',
