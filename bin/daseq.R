@@ -1051,6 +1051,31 @@ if (nrow(umap_embeddings_coords) < 400000){
 # matrix version for downstream steps
 X.embed <- as.matrix(umap_embeddings_coords %>% dplyr::select(c('UMAP1', 'UMAP2')))
 
+# add embedding and simulated info if applicable to X.cells
+if (VDJ){
+  
+  if (!SINGLE_CELL & 'v_gene' %in% colnames(umap_embeddings_coords)){ # assume if v gene not available, j gene not either
+    
+    X.cells <- X.cells %>%
+      dplyr::left_join(umap_embeddings_coords[c('v_gene', 'j_gene', 'id_col')], by = 'id_col')
+    
+  } else if (SINGLE_CELL & 'v_gene_heavy' %in% colnames(umap_embeddings_coords)){ # assume if v gene heavy not available, all others are not
+    
+    X.cells <- X.cells %>%
+      dplyr::left_join(umap_embeddings_coords[c('v_gene_heavy', 'j_gene_heavy', 'v_gene_light', 'j_gene_light', 'id_col')], by = 'id_col')
+    
+  }
+}
+
+if (AUC_VAR != FALSE){
+  X.cells <- X.cells %>%
+    dplyr::left_join(md[c(AUC_VAR, 'id_col')], by = 'id_col')
+}
+
+# add da var info
+X.cells <- X.cells %>%
+  dplyr::left_join(md[c(DA_VAR, 'id_col')], by = 'id_col')
+
 #################################################################################
 #############
 ### DASEQ ###
@@ -1122,27 +1147,24 @@ tryCatch({
   
 }, error = function(e){
   
-  # write a dummy result
-  if (AUC_VAR != FALSE){
-    dummy_data <- data.frame(matrix(ncol = 18, nrow = 0))
-    colnames(dummy_data) <- c('subject_id',  'sample_id', 'sequence_id',
-                              'da.region.label', 'v_gene', 'j_gene', AUC_VAR,
-                              DA_VAR, 'pred', 'DA.score', 'pval.wilcoxon',
-                              'pval.ttest', 'wilcox.adj.BH', 'ttest.adj.BH',
-                              'p_value_fisher', 'fdr_fisher', 'p_value_wilcox_onesided',
-                              'fdr_wilcox_onesided') 
-  } else{
-    dummy_data <- data.frame(matrix(ncol = 17, nrow = 0))
-    colnames(dummy_data) <- c('subject_id',  'sample_id', 'sequence_id',
-                              'da.region.label', 'v_gene', 'j_gene',
-                              DA_VAR, 'pred', 'DA.score', 'pval.wilcoxon',
-                              'pval.ttest', 'wilcox.adj.BH', 'ttest.adj.BH',
-                              'p_value_fisher', 'fdr_fisher', 'p_value_wilcox_onesided',
-                              'fdr_wilcox_onesided') 
-  }
+  # write a result so all the sequences will be passed forward to AUC
+  final_res <- X.cells
+  names(final_res)[names(final_res) == 'id_col'] <- ID_COL_NAME
 
-
-  write.table(dummy_data, 
+  # fill in info we cannot obtain
+  final_res$da.region.label <- '0' # use the standard label for unclustered sequences
+  final_res$pred <- NA
+  final_res$DA.score <- NA
+  final_res$pval.wilcoxon <- NA
+  final_res$pval.ttest <- NA
+  final_res$wilcox.adj.BH <- NA
+  final_res$ttest.adj.BH <- NA
+  final_res$p_value_fisher <- NA
+  final_res$fdr_fisher <- NA
+  final_res$p_value_wilcox_onesided <- NA
+  final_res$fdr_wilcox_onesided <- NA
+  
+  write.table(final_res, 
               file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, '_da_seqs.tsv')), 
               sep='\t', quote = F, row.names = F)
   
@@ -1185,31 +1207,6 @@ if (OVERWRITE == F & file.exists(file.path(OUTPUT_DIR, 'tables', 'run_stats.tsv'
 
 ################################################################################
 X.cells$da.region.label <- da_regions$da.region.label
-
-# add embedding and simulated info if applicable
-if (VDJ){
-  
-  if (!SINGLE_CELL & 'v_gene' %in% colnames(umap_embeddings_coords)){ # assume if v gene not available, j gene not either
-    
-    X.cells <- X.cells %>%
-      dplyr::left_join(umap_embeddings_coords[c('v_gene', 'j_gene', 'id_col')], by = 'id_col')
-    
-  } else if (SINGLE_CELL & 'v_gene_heavy' %in% colnames(umap_embeddings_coords)){ # assume if v gene heavy not available, all others are not
-    
-    X.cells <- X.cells %>%
-      dplyr::left_join(umap_embeddings_coords[c('v_gene_heavy', 'j_gene_heavy', 'v_gene_light', 'j_gene_light', 'id_col')], by = 'id_col')
-    
-  }
-}
-
-if (AUC_VAR != FALSE){
-  X.cells <- X.cells %>%
-    dplyr::left_join(md[c(AUC_VAR, 'id_col')], by = 'id_col')
-}
-
-# add da var info
-X.cells <- X.cells %>%
-  dplyr::left_join(md[c(DA_VAR, 'id_col')], by = 'id_col')
 
 # cluster-level stats
 write.table(da_regions[["DA.stat"]], 
