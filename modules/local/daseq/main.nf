@@ -12,7 +12,7 @@ process DASEQ{
     path "tables/da_score_auc_curve_vals.tsv", emit: da_score_auc_vals, optional: true
     path "tables/evaluation_curve_vals_*.tsv", emit: p_auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
-    path "tables/*_da_seqs.tsv", emit: da_seqs
+    path "tables/*_da_seqs.tsv", emit: da_seqs, optional: true
     path "tables/region_stats.tsv", emit: region_stats, optional: true
     path "tables/cluster_cts.tsv", emit: cluster_cts, optional: true
     path "tables/UMAP_embeddings.rds", emit: daseq_umap
@@ -63,7 +63,7 @@ process DASEQ_ASC{
     path "tables/UMAP_embeddings.rds", emit: daseq_umap
     path "tables/da_cells.rds", emit: da_cells, optional: true
     path "tables/fisher_table.tsv", emit: fisher_table, optional: true
-    path "tables/cluster_subject_freqs.tsv", emit: cluster_subject_freqs
+    path "tables/cluster_subject_freqs.tsv", emit: cluster_subject_freqs, optional: true
     path "figures/*.png", emit: figs, optional: true
 
     script:

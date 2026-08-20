@@ -1155,6 +1155,10 @@ tryCatch({
                            'subjects' = paste(names(table(X.cells$subject_id)), collapse = ', '),
                            'depths' = paste(table(X.cells$subject_id), collapse = ', '),
                            check.names = F)
+  
+  write.table(stat_table, 
+            file.path(OUTPUT_DIR, 'tables', 'run_stats.tsv'), 
+            sep = '\t', row.names = F, quote = F)
 
   warning('No DA regions found. Run ended without completing final analysis.')
   message('Associated error message: ', e$message)
