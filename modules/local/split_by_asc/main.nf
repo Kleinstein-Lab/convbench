@@ -21,7 +21,7 @@ process SPLIT_BY_ASC{
     -d $embedding \
     -md $airr \
     -da ${params.da_variable} \
-    -e TRUE
+    -e ${params.split_embeddings}
 
     """
 }
