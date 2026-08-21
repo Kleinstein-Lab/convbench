@@ -1,0 +1,15 @@
+name: asc_auroc
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  - r-base=4.5.2
+  - conda-forge::r-ggplot2
+  - conda-forge::r-dplyr
+  - conda-forge::r-tidyr
+  - conda-forge::r-stringr
+  - conda-forge::r-readr
+  - conda-forge::r-pracma
+  - conda-forge::r-argparse

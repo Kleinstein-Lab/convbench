@@ -203,21 +203,21 @@ summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count
   
   subj_info <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col), !!sym(count_col)) %>%
-    dplyr::summarise(count_per_cluster = n())
+    dplyr::summarise(count_per_cluster = n(), .groups = "drop_last")
   
   if (var_of_interest == F){
     hit_info <- df_hier_clones %>%
       dplyr::group_by(!!sym(clone_id_col)) %>%
-      dplyr::summarise(hit_seqs = NA)
+      dplyr::summarise(hit_seqs = NA, .groups = "drop")
   } else{
     hit_info <- df_hier_clones %>%
       dplyr::group_by(!!sym(clone_id_col)) %>%
-      dplyr::summarise(hit_seqs = sum(!!sym(var_of_interest) == TRUE))
+      dplyr::summarise(hit_seqs = sum(!!sym(var_of_interest) == TRUE), .groups = "drop")
   }
   
   cluster_cts <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col)) %>%
-    dplyr::summarise(total_cluster_seqs = n())
+    dplyr::summarise(total_cluster_seqs = n(), .groups = "drop")
   
   all_df <- cluster_cts %>%
     dplyr::left_join(subj_info, by = clone_id_col) %>%
@@ -271,7 +271,7 @@ make_fisher_overview_plot <- function(fisher_table, df_hier_clones, level, condi
   # get seqs per cluster
   seq_count_df <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col)) %>%
-    summarise(seq_count = n())
+    summarise(seq_count = n(), .groups = "drop")
   
   # add seqs per cluster to fisher exact table
   df_plot <- fisher_table %>%
@@ -397,6 +397,25 @@ make_auc_curve <- function(results_table, seq_table, p_val_col, cluster_id_col, 
   return(auroc)
 }
 
+calc_FDR <- function(results_table, p_val_col, auc_variable, alpha){
+  # results table = table containing some kind of test result (Fisher Exact, Wilcox, etc.).
+  #                 If rows are sequences, sequence-level FDR is calculated.
+  #                 If rows are clusters, cluster-level FDR is calculated.
+  # p_val_col = the column you want to apply the p-value or FDR threshold to
+  # auc_variable = variable to use for getting positives
+
+  # get all significant
+  results_filtered <- results_table %>%
+    dplyr::filter(!is.na(!!sym(p_val_col))) %>%
+    dplyr::filter(!!sym(p_val_col) < alpha)
+
+  # mean = TP / (TP + FP). We want FP / (TP + FP), which is 1 - (TP/(TP+FP))
+  FDR <- 1 - mean(results_filtered[[auc_variable]])
+
+  return(FDR)
+
+}
+
 ########################
 ### PREP ENVIRONMENT ###
 ########################
@@ -409,6 +428,9 @@ parser$add_argument('-d', '--data_loc', type = 'character', default = 'data',
 
 parser$add_argument('-md', '--metadata_loc', type = 'character', default = 'metadata',
                     help = 'File path for the metadata location. Metadata and data files should have 1:1 matching sequence identifiers.')
+
+parser$add_argument('-li', '--library_sizes', type = 'character', default = NULL,
+                    help = 'File path for the library sizes file location.')
 
 parser$add_argument('-o', '--output_dir', type = 'character', default = 'DAseq_output',
                     help = 'Specify an output directory location.')
@@ -450,6 +472,8 @@ args <- parser$parse_args()
 # specify which dataset we are analyzing
 DATA_LOC <- args$data_loc
 MD_LOC <- args$metadata_loc
+LIB_SIZES_LOC <- args$library_sizes
+MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_md', 1)
 
 OUTPUT_DIR <- args$output_dir
 
@@ -730,10 +754,76 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'milo.RDS')) | OVERWRITE == T){
                      meta.data = data.frame(colData(milo)), 
                      samples="sample_id")
   
-  design_df <- data.frame(colData(milo))[,c('sample_id', 'subject_id', DA_VAR)]
-  design_df <- distinct(design_df)
-  rownames(design_df) <- design_df$sample_id
-  ## Reorder rownames to match columns of nhoodCounts(milo)
+  Sys.time()
+  message('Calculating distances between nearest neighbors')
+  milo <- calcNhoodDistance(milo,
+                            d = length(colnames(data)),
+                            reduced.dim = 'embedding')
+  
+  # NOTE: not using GLMM currently, but could be implemented if needed
+  formula_string <- paste0('~ ', DA_VAR)
+  
+  design_formula <- as.formula(formula_string)
+  
+  message(paste0('Using formula: ', formula_string))
+
+  # get subjects from whole dataset who may be missing in subset i.e. ASC
+  if(!is.null(LIB_SIZES_LOC)){
+    lib_sizes <- read.csv(LIB_SIZES_LOC, sep = '\t') %>% as.data.frame()
+    
+    # find missing subjects
+    absent_subj <- setdiff(lib_sizes$subject_id, colnames(milo@nhoodCounts))
+    
+    if (length(absent_subj) > 0){
+      message(paste0('Adding missing subjects ', paste(absent_subj, collapse = ', '), ' to Milo neighborhood counts.'))
+    
+      # add to counts
+      new_cols <- Matrix(0, nrow = nrow(milo@nhoodCounts), ncol = length(absent_subj), sparse = TRUE)
+      colnames(new_cols) <- absent_subj
+      
+      new_nhood_counts <- cbind(milo@nhoodCounts, new_cols)
+      
+      milo@nhoodCounts <- new_nhood_counts
+    } else{
+      message('No missing subjects detected.')
+    }
+    
+    # make sure library size df is consistent with Milo object
+    lib_sizes <- as.data.frame(lib_sizes)
+    row.names(lib_sizes) <- lib_sizes$subject_id
+    
+    lib_sizes <- lib_sizes[colnames(milo@nhoodCounts), , drop=FALSE]
+    
+    # sanity check
+    subj_match <- all(row.names(lib_sizes) == colnames(milo@nhoodCounts))
+    if (subj_match == F){
+      warning('Subjects in Milo neighborhood count matrix are not in line with library size summary. Regression results will not be accurate.')
+    }
+    
+  } else{
+    message('Calculating library sizes from metadata...')
+    lib_sizes <- md %>%
+      dplyr::group_by(subject_id, !!sym(DA_VAR)) %>%
+      dplyr::summarize(depth = n(), .groups = "drop_last") %>%
+      as.data.frame()
+    
+    row.names(lib_sizes) <- lib_sizes$subject_id
+  }
+  
+  print('Library sizes to be used:')
+  print(lib_sizes)
+
+  # input custom cell.sizes for either the dataset as is OR 
+  # the entire dataset, even if in ASC mode
+  cell.sizes <- lib_sizes$depth
+  names(cell.sizes) <- row.names(lib_sizes)
+  
+  # make design_df based on lib sizes
+  design_df <- lib_sizes
+  design_df$sample_id <- design_df$subject_id
+  design_df <- design_df %>% dplyr::select(-depth)
+  
+  ## Reorder rownames to match columns of nhoodCounts(milo) - should already match though
   design_df <- design_df[colnames(nhoodCounts(milo)), , drop=FALSE]
   
   design_df$sample_id <- as.factor(design_df$sample_id)
@@ -745,39 +835,8 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'milo.RDS')) | OVERWRITE == T){
   
   print(table(data.frame(colData(milo))$subject_id))
   
-  Sys.time()
-  message('Calculating distances between nearest neighbors')
-  milo <- calcNhoodDistance(milo,
-                            d = length(colnames(data)),
-                            reduced.dim = 'embedding')
-  
-  # NOTE: not using GLMM currently, but could be implemented if needed
-  # if (USE_GLMM){
-  #   
-  #   formula_string <- paste0(' ~ ', DA_VAR, ' + (1|subject_id)')
-  #   
-  #   design_formula <- as.formula(formula_string)
-  #   
-  #   message(paste0('Using formula: ', formula_string))
-  #   
-  #   da_results <- testNhoods(milo,
-  #                            design = design_formula, 
-  #                            design.df = design_df,
-  #                            reduced.dim = 'embedding',
-  #                            fdr.weighting = 'neighbour-distance',
-  #                            glmm.solver = 'Fisher',
-  #                            norm.method = 'TMM',
-  #                            REML = TRUE)
-  #   
-  # } else{
-  
-  formula_string <- paste0('~ ', DA_VAR)
-  
-  design_formula <- as.formula(formula_string)
-  
-  message(paste0('Using formula: ', formula_string))
-  
   da_results <- testNhoods(milo, 
+                           cell.sizes = cell.sizes,
                            norm.method = 'logMS',
                            design = design_formula, 
                            design.df = design_df,
@@ -896,7 +955,7 @@ if (!nhoods_match){
 
 
 # match each cell with the lowest p-value of all the neighborhoods it occupies
-if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'seq_results.tsv')) | OVERWRITE == T){
+if (!file.exists(file.path(OUTPUT_DIR, 'tables', paste(MD_NAME, '_seq_results.tsv'))) | OVERWRITE == T){
   min_p_nhoods <- lapply(row.names(milo@nhoods), function(current_seq){
     
     test <- milo@nhoods[current_seq,]*da_results$SpatialFDR
@@ -906,29 +965,47 @@ if (!file.exists(file.path(OUTPUT_DIR, 'tables', 'seq_results.tsv')) | OVERWRITE
       result <- NA
       min_p_clust <- NA
       min_p_logFC <- NA
+      min_p_PVal <- NA
     } else{
       result <- min(test)
       min_p_clust <- names(which.min(test))
       min_p_logFC <- da_results %>% 
         dplyr::filter(nhood_id == min_p_clust) %>% 
         dplyr::pull(logFC)
+      min_p_PVal <- da_results %>% 
+        dplyr::filter(nhood_id == min_p_clust) %>% 
+        dplyr::pull(PValue)
     }
     
     return(data.frame('id_col' = current_seq,
                       'min_nhood_id' = min_p_clust,
                       'min_nhood_FDR' = result,
+                      'min_nhood_PValue' = min_p_PVal,
                       'min_nhood_logFC' = min_p_logFC
     ))
     
   })
   
   min_p_nhoods_df <- do.call(rbind, min_p_nhoods)
-  
+
+  if (AUC_VAR != FALSE){
+    min_p_nhoods_df <- min_p_nhoods_df %>%
+      dplyr::left_join(md_reduced[c('id_col', AUC_VAR)], by = 'id_col')
+  }
+
   write.table(min_p_nhoods_df, 
-              file.path(OUTPUT_DIR, 'tables', 'seq_results.tsv'), 
+              file.path(OUTPUT_DIR, 'tables', 'min_p_nhoods.tsv'),
+              sep = '\t', row.names = F, quote = F)
+  
+  # create a version with ALL results included (so we can reference all the neighborhoods)
+  min_p_nhoods_df_merge <- da_results %>%
+    full_join(min_p_nhoods_df, by = join_by(nhood_id == min_nhood_id), relationship = 'one-to-many', na_matches = 'never')
+
+  write.table(min_p_nhoods_df_merge, 
+              file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, '_seq_results.tsv')), 
               sep = '\t', row.names = F, quote = F)
 } else{
-  min_p_nhoods_df <- read.csv(file.path(OUTPUT_DIR, 'tables', 'seq_results.tsv'), sep = '\t')
+  min_p_nhoods_df <- read.csv(file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, '_seq_results.tsv')), sep = '\t')
 }
 
 # get a continuous DA measure - copy of benchmark - sum of logFC of all neighborhoods
@@ -963,9 +1040,14 @@ if (AUC_VAR != FALSE){
   min_p_nhoods_df[is.na(min_p_nhoods_df$min_nhood_FDR), 'min_nhood_FDR'] <- 1
   
   # add AUC var info
-  min_p_nhoods_df <- min_p_nhoods_df %>%
-    dplyr::inner_join(md_reduced, by = 'id_col')
-  
+  if (!AUC_VAR %in% colnames(min_p_nhoods_df)){
+    min_p_nhoods_df <- min_p_nhoods_df %>%
+      dplyr::left_join(md_reduced[c('id_col', AUC_VAR)])
+  }
+
+  # get auprc baseline
+  auprc_baseline <- mean(min_p_nhoods_df[[AUC_VAR]], na.rm = T)
+
   auc_thresholds <- sort(unique(min_p_nhoods_df$min_nhood_FDR))
   # auc_thresholds <- quantile(min_p_nhoods_df$min_nhood_FDR, seq(0, 1, 0.01), names=F)
   # auc_thresholds <- quantile(min_p_nhoods_df$min_nhood_FDR, seq(0, 1, 0.01), names=F)
@@ -986,38 +1068,83 @@ if (AUC_VAR != FALSE){
     true_neg <- sum(da.cell.list == F & min_p_nhoods_df[[AUC_VAR]] == F)
     false_pos <- sum(da.cell.list == T & min_p_nhoods_df[[AUC_VAR]] == F)
     
+    # AUROC
     TPR <- true_pos / (true_pos + false_neg)
     FPR <- 1 - (true_neg / (true_neg + false_pos))
     
+    # FDR
+    FDR <- false_pos / (false_pos + true_pos)
+
+    # AUPRC
+    precision <- true_pos / (false_pos + true_pos)
+
     return(data.frame('TPR' = TPR,
-                      'FPR' = FPR))
+                      'FPR' = FPR,
+                      'Precision' = precision,
+                      'FDR' = FDR,
+                      'TP' = true_pos,
+                      'FP' = false_pos,
+                      'TN' = true_neg,
+                      'FN' = false_neg
+                      ))
     
   })
   
   auc_df <- do.call(rbind, auc_data)
   auc_df$spatialFDR_threshold <- auc_thresholds
   
+  # estimate the first precision point - it should always be NA b/c no false or true positives below the first threshold
+  if (is.na(auc_df[1,'Precision']) & nrow(auc_df) > 1){
+    auc_df[1,'Precision'] <- auc_df[2,'Precision']
+  }
+
   write.table(auc_df, 
-              file.path(OUTPUT_DIR, 'tables', 'auc_curve_vals.tsv'), 
+              file.path(OUTPUT_DIR, 'tables', 'evaluation_curve_vals.tsv'), 
               sep = '\t', row.names = F, quote = F)
   
   # get auroc
   auroc <- pracma::trapz(auc_df$FPR, auc_df$TPR)
+
+  # get auprc
+  auprc <- pracma::trapz(auc_df$TPR, auc_df$Precision)
   
   auc_df %>%
     ggplot(aes(x = FPR, y = TPR)) +
+    geom_abline(slope = 1, intercept = 0, color = 'gray') +
     geom_point() +
     geom_line() +
     labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
-         subtitle = paste0('AUC: ', round(auroc, 3), '; ', 
+         subtitle = paste0('AUROC: ', round(auroc, 3), '; ', 
                            prettyNum(sum(valid_cells), big.mark = ",", scientific = FALSE), '/', 
                            prettyNum(total_cells, big.mark = ",", scientific = FALSE), ' cells in DA neighborhoods')) + 
     theme_minimal()
   
-  ggsave(file.path(OUTPUT_DIR, 'figures', 'AUC_curve.png'),
+  ggsave(file.path(OUTPUT_DIR, 'figures', 'AUROC.png'),
          device = 'png',
          width = 7,
          height = 6)
+
+  # PRC
+  auc_df %>%
+    ggplot(aes(x = TPR, y = Precision)) +
+    geom_hline(yintercept = auprc_baseline, color = 'red', linetype = 'dashed') +
+    geom_point() +
+    geom_line() +
+    labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
+         subtitle = paste0('AUPRC: ', round(auprc, 3), '; ', 
+                           prettyNum(sum(valid_cells), big.mark = ",", scientific = FALSE), '/', 
+                           prettyNum(total_cells, big.mark = ",", scientific = FALSE), ' cells in DA neighborhoods'),
+         x = 'Recall') + 
+    theme_minimal() +
+    scale_y_continuous(limits = c(0, 1))
+  
+  ggsave(file.path(OUTPUT_DIR, 'figures', 'AUPRC.png'),
+         device = 'png',
+         width = 7,
+         height = 6)
+
+  # FDR
+  FDR <- calc_FDR(min_p_nhoods_df, 'min_nhood_FDR', AUC_VAR, 0.05)
   
   ###########
   # JACCARD #
@@ -1068,6 +1195,8 @@ if (AUC_VAR != FALSE){
          height = 5)
 } else{
   auroc <- NA
+  auprc <- NA
+  FDR <- NA
 }
 
 ################################################################################
@@ -1245,10 +1374,14 @@ if (AUC_VAR != FALSE){
   stat_table$Jaccard_0.1 = jaccard_1
   stat_table$Jaccard_max = Jaccard_max
   stat_table$Jaccard_max_p = Jaccard_max_p
-  stat_table$AUC <- c(auroc)
+  stat_table$AUROC <- c(auroc)
+  stat_table$AUPRC <- c(auprc)
+  stat_table$FDR <- c(FDR)
   
   stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
-                             'num_hit_clusters', 'avg_pct_hits', 'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
+                             'num_hit_clusters', 'avg_pct_hits',
+                             'AUROC', 'AUPRC', 'FDR', 
+                             'Jaccard_0.005', 'Jaccard_0.05',
                              'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                              'time (min)', 'subjects', 'depths')]
 }
@@ -1440,9 +1573,14 @@ sig_nhoods <- da_results %>%
   dplyr::pull(nhood_id)
 
 sig_nhood_cells <- milo@nhoods[,as.character(sig_nhoods)]
-sig_nhood_idx <- rowSums(sig_nhood_cells) > 0
 
-sig_nhood_cell_ids <- row.names(sig_nhood_cells[sig_nhood_idx,])
+if(length(sig_nhoods) == 1){
+  sig_nhood_idx <- sig_nhood_cells > 0
+  sig_nhood_cell_ids <- names(sig_nhood_cells[sig_nhood_idx])
+} else{
+  sig_nhood_idx <- rowSums(sig_nhood_cells) > 0
+  sig_nhood_cell_ids <- row.names(sig_nhood_cells[sig_nhood_idx,])
+}
 
 umap_coords <- umap_coords %>%
   dplyr::mutate(da_cell = if_else(id_col %in% sig_nhood_cell_ids, TRUE, FALSE))

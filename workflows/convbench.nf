@@ -3,15 +3,24 @@
     IMPORT MODULES / SUBWORKFLOWS / FUNCTIONS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
-include { CDR3_SIMILARITY        } from '../modules/local/cdr3_similarity/main'
-include { MILO                   } from '../modules/local/milo/main'
-include { DASEQ                  } from '../modules/local/daseq/main'
-include { BCRDIST                  } from '../modules/local/bcrdist/main'
-include { MULTIQC                } from '../modules/nf-core/multiqc/main'
-include { paramsSummaryMap       } from 'plugin/nf-schema'
-include { paramsSummaryMultiqc   } from '../subworkflows/nf-core/utils_nfcore_pipeline'
-include { softwareVersionsToYAML } from '../subworkflows/nf-core/utils_nfcore_pipeline'
-include { methodsDescriptionText } from '../subworkflows/local/utils_nfcore_convbench_pipeline'
+include { SPLIT_BY_ASC                                            } from '../modules/local/split_by_asc/main'
+include { CDR3_SIMILARITY                                         } from '../modules/local/cdr3_similarity/main'
+include { CDR3_SIMILARITY_ASC                                     } from '../modules/local/cdr3_similarity/main'
+include { MILO                                                    } from '../modules/local/milo/main'
+include { MILO_ASC                                                } from '../modules/local/milo/main'
+include { DASEQ                                                   } from '../modules/local/daseq/main'
+include { DASEQ_ASC                                               } from '../modules/local/daseq/main'
+include { BCRDIST                                                 } from '../modules/local/bcrdist/main'
+include { BCRDIST_ASC                                             } from '../modules/local/bcrdist/main'
+include { MULTIQC                                                 } from '../modules/nf-core/multiqc/main'
+include { GET_ASC_AUROC as GET_CDR3_SIMILARITY_ASC_AUROC          } from '../modules/local/get_asc_auroc/main'
+include { GET_ASC_AUROC as GET_MILO_ASC_AUROC                     } from '../modules/local/get_asc_auroc/main'
+include { GET_ASC_AUROC as GET_DASEQ_ASC_AUROC                    } from '../modules/local/get_asc_auroc/main'
+include { GET_ASC_AUROC as GET_BCRDIST_ASC_AUROC                  } from '../modules/local/get_asc_auroc/main'
+include { paramsSummaryMap                                        } from 'plugin/nf-schema'
+include { paramsSummaryMultiqc                                    } from '../subworkflows/nf-core/utils_nfcore_pipeline'
+include { softwareVersionsToYAML                                  } from '../subworkflows/nf-core/utils_nfcore_pipeline'
+include { methodsDescriptionText                                  } from '../subworkflows/local/utils_nfcore_convbench_pipeline'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -36,39 +45,147 @@ workflow CONVBENCH {
     ch_samplesheet.dump(tag: "samplesheet")
 
     //
+    // MODULE: Run split_by_ASC
+    //
+
+    if (params.asc_mode && !params.asc_guide){
+        error "When --asc_mode is enabled, you must provide --asc_guide."
+    }
+
+    if (params.asc_mode){
+
+        // make channel for guide
+        asc_guide = Channel.value(file(params.asc_guide))
+
+        // make ASC level channel    
+        asc_splitting = SPLIT_BY_ASC(ch_samplesheet, asc_guide)
+
+        ch_file_pairs = asc_splitting.flatMap{ meta, md_files, emb_files, library_sizes  ->
+            
+            def meta_id = meta.id
+
+            def labeled_md_files = md_files
+                .collect{ it ->
+                    [meta_id, it.name.split('_')[0], library_sizes, it]
+                }
+
+            def labeled_emb_files = emb_files
+                .collect{ it ->
+                    [meta_id, it.name.split('_')[0], library_sizes, it]
+                }
+            
+            return tuple(
+                labeled_md_files + labeled_emb_files
+            )
+        }
+        .groupTuple(by: [0, 1, 2])
+        .map{ meta_id, asc_id, library_sizes, files -> // ensure files are always in the right order
+        
+            def airr = files.find { it.name.endsWith('_md.tsv.gz') }
+            def embedding = files.find { it.name.endsWith('_emb.tsv.gz')}
+
+            tuple(meta_id, asc_id, airr, embedding, library_sizes)
+        }
+    }
+
+    //
     // MODULE: Run CDR3_similarity
     //
 
     if (params.conv_tools && params.conv_tools.split(',').contains('cdr3_similarity')){
-        CDR3_SIMILARITY(
-            ch_samplesheet
-        )
+        if(params.asc_mode){
+
+            cdr3_sim_asc_result = CDR3_SIMILARITY_ASC(ch_file_pairs)
+
+            def tool_id = 'cdr3_similarity'
+
+            cdr3_sim_asc_input = cdr3_sim_asc_result.auc_input
+                .map{meta_id, seq_file ->
+                    tuple(tool_id, meta_id, seq_file)
+                }
+                .groupTuple(by: [0, 1])
+
+            GET_CDR3_SIMILARITY_ASC_AUROC(cdr3_sim_asc_input)
+        
+        } else{
+            CDR3_SIMILARITY(
+                ch_samplesheet
+            )
+        }
     }
 
     //
     // MODULE: Run Milo
     //
     if (params.conv_tools && params.conv_tools.split(',').contains('milo')){
-        MILO(
-            ch_samplesheet
-        )
+        if(params.asc_mode){
+            
+            milo_asc_result = MILO_ASC(ch_file_pairs)
+
+            def tool_id = 'Milo'
+
+            milo_asc_input = milo_asc_result.auc_input
+                .map{meta_id, seq_file ->
+                    tuple(tool_id, meta_id, seq_file)
+                }
+                .groupTuple(by: [0, 1])
+
+            GET_MILO_ASC_AUROC(milo_asc_input)
+            
+        } else{
+            MILO(
+                ch_samplesheet
+            )
+        }
     }
     //
     // MODULE: Run DA-seq
     //
     if (params.conv_tools && params.conv_tools.split(',').contains('daseq')){
-        DASEQ(
-            ch_samplesheet
-        )
+        if(params.asc_mode){
+
+            daseq_asc_result = DASEQ_ASC(ch_file_pairs)
+
+            def tool_id = 'DA-seq'
+
+            daseq_asc_input = daseq_asc_result.auc_input
+                .map{meta_id, seq_file ->
+                    tuple(tool_id, meta_id, seq_file)
+                }
+                .groupTuple(by: [0, 1])
+
+            GET_DASEQ_ASC_AUROC(daseq_asc_input)
+
+        } else{
+            DASEQ(
+                ch_samplesheet
+            )
+        }
     }
 
     //
     // MODULE: Run BCRdist
     //
     if (params.conv_tools && params.conv_tools.split(',').contains('bcrdist')){
-        BCRDIST(
-            ch_samplesheet
-        )
+        if(params.asc_mode){
+
+            bcrdist_asc_result = BCRDIST_ASC(ch_file_pairs)
+
+            def tool_id = 'BCRdist'
+
+            bcrdist_asc_input = bcrdist_asc_result.auc_input
+                .map{meta_id, seq_file ->
+                    tuple(tool_id, meta_id, seq_file)
+                }
+                .groupTuple(by: [0, 1])
+
+            GET_BCRDIST_ASC_AUROC(bcrdist_asc_input)
+
+        } else{
+            BCRDIST(
+                ch_samplesheet
+            )
+        }
     }
 
     //

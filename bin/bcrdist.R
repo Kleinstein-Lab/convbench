@@ -187,7 +187,7 @@ fisher_test_cluster <- function(df, subj_summary, input_convergent_clone_id, con
   
 }
 
-get_fisher_exact_table <- function(hier_clone_df, condition, condition_col = 'status', clone_id_col = 'convergent_clone_id', count_col = 'subject_id', filter = TRUE){
+get_fisher_exact_table <- function(hier_clone_df, condition, condition_col = 'status', clone_id_col = 'convergent_clone_id', count_col = 'subject_id', subj_summary = NULL, filter = TRUE){
   # go from a hierarchical clones output dataframe
   # then get the clones worth doing fisher's exact on
   # do the fisher's exact test on every clone to test for healthy or diseased patients
@@ -212,9 +212,13 @@ get_fisher_exact_table <- function(hier_clone_df, condition, condition_col = 'st
   
   # get the total subject information summarized BEFORE filtering
   # in case subjects will get lost
-  subj_summary <- hier_clone_df %>%
-    dplyr::select(!!sym(count_col), !!sym(condition_col)) %>%
-    distinct() 
+
+  # in the case of ASCs, total subj information can also be input as a parameter
+  if (is.null(subj_summary)){
+    subj_summary <- hier_clone_df %>%
+      dplyr::select(!!sym(count_col), !!sym(condition_col)) %>%
+      distinct() 
+  }
   
   # reduce the table to prepare for fisher and do tests faster
   hier_clone_df_fisher <- hier_clone_df %>%
@@ -263,13 +267,13 @@ get_fisher_exact_table <- function(hier_clone_df, condition, condition_col = 'st
   return(fisher_results_all)
 }
 
-get_combined_fisher_exact_table <- function(hier_clone_df, condition_set, condition_col = 'status', clone_id_col = 'convergent_clone_id', count_col = 'subject_id', filter = TRUE){
+get_combined_fisher_exact_table <- function(hier_clone_df, condition_set, condition_col = 'status', clone_id_col = 'convergent_clone_id', count_col = 'subject_id', subj_summary = NULL, filter = TRUE){
   # hier_clone_df: hierarchical clones df
   # condition set: character vector containing all conditions to be tested
   
   condition_fisher_dfs <- lapply(condition_set, function(condition){
     
-    get_fisher_exact_table(hier_clone_df, condition, condition_col, clone_id_col, count_col, filter)
+    get_fisher_exact_table(hier_clone_df, condition, condition_col, clone_id_col, count_col, subj_summary, filter)
     
   })
   
@@ -286,21 +290,21 @@ summarize_clusters <- function(fisher_table, df_hier_clones, clone_id_col, count
   
   subj_info <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col), !!sym(count_col)) %>%
-    dplyr::summarise(count_per_cluster = n())
+    dplyr::summarise(count_per_cluster = n(), .groups = "drop_last")
   
   if (var_of_interest == F){
     hit_info <- df_hier_clones %>%
       dplyr::group_by(!!sym(clone_id_col)) %>%
-      dplyr::summarise(hit_seqs = NA)
+      dplyr::summarise(hit_seqs = NA, .groups = "drop")
   } else{
     hit_info <- df_hier_clones %>%
       dplyr::group_by(!!sym(clone_id_col)) %>%
-      dplyr::summarise(hit_seqs = sum(!!sym(var_of_interest) == TRUE))
+      dplyr::summarise(hit_seqs = sum(!!sym(var_of_interest) == TRUE), .groups = "drop")
   }
   
   cluster_cts <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col)) %>%
-    dplyr::summarise(total_cluster_seqs = n())
+    dplyr::summarise(total_cluster_seqs = n(), .groups = "drop")
   
   all_df <- cluster_cts %>%
     dplyr::left_join(subj_info, by = clone_id_col) %>%
@@ -354,7 +358,7 @@ make_fisher_overview_plot <- function(fisher_table, df_hier_clones, level, condi
   # get seqs per cluster
   seq_count_df <- df_hier_clones %>%
     dplyr::group_by(!!sym(clone_id_col)) %>%
-    summarise(seq_count = n())
+    summarise(seq_count = n(), .groups = "drop")
   
   # add seqs per cluster to fisher exact table
   df_plot <- fisher_table %>%
@@ -380,36 +384,51 @@ make_fisher_overview_plot <- function(fisher_table, df_hier_clones, level, condi
   
 }
 
-do_wilcox_test <- function(results_df, da_variable, disease_group, cluster_col){
+do_wilcox_test <- function(results_df, da_variable, disease_group, cluster_col, subject_depths = NULL){
   # perform Wilcoxon test on each cluster comparing counts in each group normalized
   # by subject depth.
   # results_df should contain information about the cluster ID (cluster_col), da_variable,
   # and subject IDs
 
   # Subject sequencing depths
-  subject_depths <- results_df %>%
-    dplyr::group_by(subject_id, !!sym(da_variable)) %>%
-    dplyr::summarize(subj_depth = n())
+  if(is.null(subject_depths)){
+    subject_depths <- results_df %>%
+      dplyr::group_by(subject_id, !!sym(da_variable)) %>%
+      dplyr::summarize(depth = n(), .groups = "drop_last")
+  }
 
   # Cluster frequencies per subject
   cluster_subject_freqs <- results_df %>%
     dplyr::group_by(!!sym(cluster_col), subject_id) %>%
-    dplyr::summarize(cluster_sequences = n()) %>%
+    dplyr::summarize(cluster_sequences = n(), .groups = "drop_last") %>%
     dplyr::left_join(subject_depths, by = 'subject_id') %>%
-    dplyr::mutate(normalized_freq = cluster_sequences / subj_depth) %>%
+    dplyr::mutate(normalized_freq = cluster_sequences / depth) %>%
     tidyr::pivot_wider(id_cols = cluster_col, 
                       names_from = 'subject_id', 
                       values_from = 'normalized_freq', 
                       values_fill = 0) %>%
     as.data.frame(check.names = F)
 
-  write.table(cluster_subject_freqs, 
-              file.path(OUTPUT_DIR, 'tables', 'cluster_subject_freqs.tsv'), 
-              sep = '\t', row.names = F, quote = F)
-
   row.names(cluster_subject_freqs) <- as.character(cluster_subject_freqs[[cluster_col]])
   cluster_subject_freqs <- cluster_subject_freqs %>%
                               dplyr::select(-!!sym(cluster_col))
+
+  # add individuals not in the ASC if needed
+  absent_subj <- setdiff(subject_depths$subject_id, colnames(cluster_subject_freqs))
+    
+  if (length(absent_subj) > 0){
+    message(paste0('Adding missing subjects ', paste(absent_subj, collapse = ', '), ' to cluster subject frequency table.'))
+    
+    # add to counts
+    cluster_subject_freqs[, absent_subj] <- 0
+
+  } else{
+    message('No missing subjects detected.')
+  }
+  
+  write.table(cluster_subject_freqs,
+              file.path(OUTPUT_DIR, 'tables', 'cluster_subject_freqs.tsv'), 
+              sep = '\t', row.names = T, quote = F)
 
   ctrl <- subject_depths %>%
             dplyr::filter(!!sym(da_variable) != disease_group) %>%
@@ -465,7 +484,7 @@ make_purity_plot <- function(purity_data, cluster_id_col, pct_hit_col, total_seq
 }
 
 
-make_auc_curve <- function(results_table, seq_table, p_val_col, cluster_id_col, auc_variable, name){
+evaluate_results <- function(results_table, seq_table, p_val_col, cluster_id_col, auc_variable, name){
   # results table = table containing some kind of test result (Fisher Exact, Wilcox, etc.)
   # seq_table = table containing sequence-level information including auc_variable and cluster_id_col
   #             used to identify the correct category for each sequence
@@ -473,6 +492,9 @@ make_auc_curve <- function(results_table, seq_table, p_val_col, cluster_id_col, 
   # cluster_id_col = IDs specifying clusters that were tested
   # auc_variable = variable to use for getting positives in the AUC curve
   # name = a name to specify for saving figures and tables (i.e. the name of the test)
+  
+  # get AUPRC baseline - fraction of positive events
+  auprc_baseline <- mean(seq_table[[auc_variable]], na.rm = T)
 
   auc_thresholds <- sort(unique(results_table[[p_val_col]]))
   
@@ -503,38 +525,98 @@ make_auc_curve <- function(results_table, seq_table, p_val_col, cluster_id_col, 
     
     false_pos <- sum(da_result[[auc_variable]] == F & da_result$DA_cell == T)
     
+    # AUROC
     TPR <- true_pos / (true_pos + false_neg)
     FPR <- 1 - (true_neg / (true_neg + false_pos))
+       
+    # FDR
+    FDR <- false_pos / (false_pos + true_pos)
+
+    # AUPRC
+    precision <- true_pos / (false_pos + true_pos)
     
     return(data.frame('TPR' = TPR,
-                      'FPR' = FPR))
+                      'FPR' = FPR,
+                      'Precision' = precision,
+                      'FDR' = FDR,
+                      'TP' = true_pos,
+                      'FP' = false_pos,
+                      'TN' = true_neg,
+                      'FN' = false_neg))
     
   })
   
   auc_df <- do.call(rbind, auc_data)
   auc_df[[p_val_col]] <- auc_thresholds
+
+  # estimate the first precision point - it should always be NA b/c no false or true positives below the first threshold
+  if (is.na(auc_df[1,'Precision']) & nrow(auc_df) > 1){
+    auc_df[1,'Precision'] <- auc_df[2,'Precision']
+  }
   
   write.table(auc_df, 
-              file.path(OUTPUT_DIR, 'tables', paste0('auc_curve_vals_', name, '.tsv')), 
+              file.path(OUTPUT_DIR, 'tables', paste0('evaluation_curve_vals_', name, '.tsv')), 
               sep = '\t', row.names = F, quote = F)
   
   # get auroc
   auroc <- pracma::trapz(auc_df$FPR, auc_df$TPR)
+
+  # get auprc
+  auprc <- pracma::trapz(auc_df$TPR, auc_df$Precision)
   
   auc_df %>%
     ggplot(aes(x = FPR, y = TPR)) +
+    geom_abline(slope = 1, intercept = 0, color = 'gray') +
     geom_point() +
     geom_line() +
     labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
-         subtitle = paste0(name, ' AUC: ', round(auroc, 3))) + 
+         subtitle = paste0(name, ' AUROC: ', round(auroc, 3))) + 
     theme_minimal()
   
-  ggsave(file.path(OUTPUT_DIR, 'figures', paste0('AUC_curve_', name, '.png')),
+  ggsave(file.path(OUTPUT_DIR, 'figures', paste0('AUROC_', name, '.png')),
          device = 'png',
          width = 7,
          height = 6)
 
-  return(auroc)
+  # PRC
+  auc_df %>%
+    ggplot(aes(x = TPR, y = Precision)) +
+    geom_hline(yintercept = auprc_baseline, color = 'red', linetype = 'dashed') +
+    geom_point() +
+    geom_line() +
+    labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
+         subtitle = paste0(name, ' AUPRC: ', round(auprc, 3)),
+         x = 'Recall') + 
+    theme_minimal() +
+    scale_y_continuous(limits = c(0, 1))
+  
+  ggsave(file.path(OUTPUT_DIR, 'figures', paste0('AUPRC_', name, '.png')),
+         device = 'png',
+         width = 7,
+         height = 6)
+
+  return(list('AUROC' = auroc,
+              'AUPRC' = auprc))
+
+}
+
+calc_FDR <- function(results_table, p_val_col, auc_variable, alpha){
+  # results table = table containing some kind of test result (Fisher Exact, Wilcox, etc.).
+  #                 If rows are sequences, sequence-level FDR is calculated.
+  #                 If rows are clusters, cluster-level FDR is calculated.
+  # p_val_col = the column you want to apply the p-value or FDR threshold to
+  # auc_variable = variable to use for getting positives
+
+  # get all significant
+  results_filtered <- results_table %>%
+  dplyr::filter(!is.na(!!sym(p_val_col))) %>%
+    dplyr::filter(!!sym(p_val_col) < alpha)
+
+  # mean = TP / (TP + FP). We want FP / (TP + FP), which is 1 - (TP/(TP+FP))
+  FDR <- 1 - mean(results_filtered[[auc_variable]])
+
+  return(FDR)
+
 }
 
 ##############################
@@ -548,6 +630,9 @@ parser$add_argument('-he', '--helper_loc', type = 'character', default = 'bin/tc
 
 parser$add_argument('-md', '--metadata_loc', type = 'character', default = 'metadata',
                     help = 'File path for the metadata location.')
+
+parser$add_argument('-li', '--library_sizes', type = 'character', default = NULL,
+                    help = 'File path for the library sizes file location.')
 
 parser$add_argument('-o', '--output_dir', type = 'character', default = 'tcrdist3_fisher_output',
                     help = 'Specify an output directory location.')
@@ -626,6 +711,9 @@ args <- parser$parse_args()
 TCRDIST_SCRIPT <- Sys.which('tcrdist3.py')
 
 MD_LOC <- args$metadata_loc
+LIB_SIZES_LOC <- args$library_sizes
+MD_NAME <- stringr::str_split_i(basename(MD_LOC), '_md', 1)
+
 OUTPUT_DIR <- args$output_dir
 
 DA_VAR <- args$da_variable
@@ -919,12 +1007,19 @@ if(!is.null(p2)) ggsave(file.path(OUTPUT_DIR, 'figures','n_sequences_distributio
 ### FISHER EXACT TEST ###
 #########################
 # Fisher's exact test
-  
+
+if(!is.null(LIB_SIZES_LOC)){
+  lib_sizes <- read.csv(LIB_SIZES_LOC, sep = '\t') %>% as.data.frame()
+} else{
+  lib_sizes <- NULL
+}
+
 fisher_table <- get_combined_fisher_exact_table(hier_clone_df = convergent_clone,
                                                   condition_set = c(DISEASE_GP),
                                                   condition_col = DA_VAR,
                                                   clone_id_col = 'convergent_clone_id',
                                                   count_col = 'subject_id',
+                                                  subj_summary = lib_sizes,
                                                   filter = FALSE)
   
 write.table(fisher_table, file.path(OUTPUT_DIR, 'tables', "fisher_table.tsv"), sep="\t", quote = F, row.names = F)
@@ -969,9 +1064,9 @@ sum1 <- convergent_clone[c(cols_of_interest)]
 sum2 <- fisher_table[c('convergent_clone_id', 'p_value', 'odds_ratio', 'fdr')] %>% distinct()
 colnames(sum2) <- c('convergent_clone_id', 'p_value_fisher', 'odds_ratio_fisher', 'fdr_fisher')
 
-sum <- dplyr::left_join(sum1, sum2, by = 'convergent_clone_id')
+summ <- dplyr::left_join(sum1, sum2, by = 'convergent_clone_id')
   
-write.table(sum, file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"), sep="\t", quote = F, row.names = F)
+# write.table(sum, file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, "_seq_summary.tsv")), sep="\t", quote = F, row.names = F)
 
 # get ending time after getting clusters & Fisher Test and making basic figures/tables
 end_time <- Sys.time()
@@ -990,14 +1085,14 @@ time_taken <- end_time - start_time
 
 message('Completing Wilcoxon DA tests...')
 
-wilcox_res <- do_wilcox_test(convergent_clone, DA_VAR, DISEASE_GP, 'convergent_clone_id')
+wilcox_res <- do_wilcox_test(convergent_clone, DA_VAR, DISEASE_GP, 'convergent_clone_id', subject_depths = lib_sizes)
 
 wilcox_sum <- wilcox_res
 colnames(wilcox_sum) <- c('convergent_clone_id', 'p_value_wilcox', 'fdr_wilcox')
 
-sum <- dplyr::left_join(sum, wilcox_sum, by = 'convergent_clone_id')
+summ <- dplyr::left_join(summ, wilcox_sum, by = 'convergent_clone_id')
 
-write.table(sum, file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"), 
+write.table(summ, file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, "_seq_summary.tsv")), 
             sep="\t", quote = F, row.names = F)
 
 wilcox_res %>%
@@ -1022,11 +1117,11 @@ write.table(summary, file.path(OUTPUT_DIR, 'tables', 'cluster_subj_summary.tsv')
 
 # make a summary of stats
 stat_table <- data.frame('tool' = c('BCRdist + Fisher', 'BCRdist + Wilcoxon'),
-                         'total_seqs' = nrow(sum),
-                         'total_subj' = length(unique(sum$subject_id)),
+                         'total_seqs' = nrow(summ),
+                         'total_subj' = length(unique(summ$subject_id)),
                          'time (min)' = as.numeric(time_taken, units = "mins"),
-                         'subjects' = paste(names(table(sum$subject_id)), collapse = ', '),
-                         'depths' = paste(table(sum$subject_id), collapse = ', '),
+                         'subjects' = paste(names(table(summ$subject_id)), collapse = ', '),
+                         'depths' = paste(table(summ$subject_id), collapse = ', '),
                          check.names = F)
 
 #######
@@ -1037,21 +1132,28 @@ if (AUC_VAR != FALSE){
 
   message('Making AUC curves...')
   # do AUC curve with the Fisher Exact results
-  fisher_auc <- make_auc_curve(fisher_table, convergent_clone, 'p_value', 'convergent_clone_id', AUC_VAR, 'Fisher')
+  fisher_auc <- evaluate_results(fisher_table, convergent_clone, 'p_value', 'convergent_clone_id', AUC_VAR, 'Fisher')
 
   # do AUC curve with the Wilcoxon results
-  wilcox_auc <- make_auc_curve(wilcox_res, convergent_clone, 'p_value', 'convergent_clone_id', AUC_VAR, 'Wilcoxon')
-  
-  stat_table[1, 'AUC'] <- c(fisher_auc)
-  stat_table[2, 'AUC'] <- c(wilcox_auc)
+  wilcox_auc <- evaluate_results(wilcox_res, convergent_clone, 'p_value', 'convergent_clone_id', AUC_VAR, 'Wilcoxon')
+
+  stat_table[1, 'AUROC'] <- c(fisher_auc$AUROC)
+  stat_table[2, 'AUROC'] <- c(wilcox_auc$AUROC)
+
+  stat_table[1, 'AUPRC'] <- c(fisher_auc$AUPRC)
+  stat_table[2, 'AUPRC'] <- c(wilcox_auc$AUPRC)
+
+  # get FDR at 0.05 cutoff for FDR
+  stat_table[1, 'FDR'] <- calc_FDR(summ, 'fdr_fisher', AUC_VAR, 0.05)
+  stat_table[2, 'FDR'] <- calc_FDR(summ, 'fdr_wilcox', AUC_VAR, 0.05)
     
   ###########
   # JACCARD #
   ###########
   
-  sum <- read.csv(file.path(OUTPUT_DIR, 'tables', "seq_summary.tsv"), sep = '\t')
+  # sum <- read.csv(file.path(OUTPUT_DIR, 'tables', paste0(MD_NAME, "_seq_summary.tsv")), sep = '\t')
   
-  jaccard_df <- sum %>%
+  jaccard_df <- summ %>%
     dplyr::mutate(p_under_0.005 = p_value_fisher <= 0.005,
                   p_under_0.05 = p_value_fisher <= 0.05,
                   p_under_0.1 = p_value_fisher <= 0.1)
@@ -1121,7 +1223,8 @@ if (AUC_VAR != FALSE){
   
   stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
                               'num_hit_clusters', 'avg_pct_hits',
-                              'AUC', 'Jaccard_0.005', 'Jaccard_0.05',
+                              'AUROC', 'AUPRC', 'FDR', 
+                              'Jaccard_0.005', 'Jaccard_0.05',
                               'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                               'time (min)', 'subjects', 'depths')]
 
