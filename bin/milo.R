@@ -1048,6 +1048,7 @@ if (AUC_VAR != FALSE){
   # get auprc baseline
   auprc_baseline <- mean(min_p_nhoods_df[[AUC_VAR]], na.rm = T)
 
+  min_p_nhoods_df$min_nhood_FDR <- round(min_p_nhoods_df$min_nhood_FDR, 6)
   auc_thresholds <- sort(unique(min_p_nhoods_df$min_nhood_FDR))
   # auc_thresholds <- quantile(min_p_nhoods_df$min_nhood_FDR, seq(0, 1, 0.01), names=F)
   # auc_thresholds <- quantile(min_p_nhoods_df$min_nhood_FDR, seq(0, 1, 0.01), names=F)

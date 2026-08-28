@@ -66,6 +66,9 @@ evaluation_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
   
   # change the sequences with no nhood to a min p of 1
   res[is.na(res[[p_col]]), p_col] <- 1
+
+  # avoid floating point errors
+  res[[p_col]] <- round(res[[p_col]], 6)
   
   if (simplify_p){
     auc_thresholds_init <- sort(unique(res[[p_col]]))

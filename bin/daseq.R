@@ -439,6 +439,8 @@ evaluate_results <- function(seq_table, p_val_col, cluster_id_col, auc_variable,
   assigned_cells <- total_cells - unassigned_cells
   seq_table[is.na(seq_table[[p_val_col]]), p_val_col] <- 1
   
+  # avoid floating point errors
+  seq_table[[p_val_col]] <- round(seq_table[[p_val_col]], 6)
   p_auc_thresholds <- sort(unique(seq_table[[p_val_col]]))
   # p_auc_thresholds <- quantile(X.cells$wilcox.adj.BH, seq(0, 1, 0.01), names=F)
   # auc_thresholds[1] <- auc_thresholds[1] - 1e-8

@@ -496,6 +496,8 @@ evaluate_results <- function(results_table, seq_table, p_val_col, cluster_id_col
   # get AUPRC baseline - fraction of positive events
   auprc_baseline <- mean(seq_table[[auc_variable]], na.rm = T)
 
+  # avoid floating point errors
+  results_table[[p_val_col]] <- round(results_table[[p_val_col]], 6)
   auc_thresholds <- sort(unique(results_table[[p_val_col]]))
   
   # add to the largest to make sure the entire curve is captured
