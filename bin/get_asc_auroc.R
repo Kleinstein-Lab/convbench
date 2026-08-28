@@ -55,6 +55,40 @@ if (!dir.exists('figures')){
 ### helper functions ###
 ########################
 
+  save_purity_stats <- function(combined_results, id_col, auc_variable, p_val_col, num_top = 100){
+    # get hit clusters
+    purity_df <- combined_results %>%
+      dplyr::group_by(!!sym(id_col)) %>%
+      dplyr::summarize(hit_cluster = sum(!!sym(auc_variable)) > 0, 
+                       pct_cluster_hits = mean(!!sym(auc_variable), na.rm = T),
+                       .groups = 'drop')
+
+    # get p values
+    combined_results[[p_val_col]] <- round(combined_results[[p_val_col]], 6)
+    p_val_df <- combined_results[c(id_col, p_val_col)] %>% distinct()
+
+    purity_df <- purity_df %>%
+      dplyr::left_join(p_val_df, by = id_col)
+
+    # get hits in top pval rankings
+    purity_df_top <- purity_df %>%
+      dplyr::arrange(!!sym(p_val_col)) %>%
+      dplyr::slice_head(n = 100)
+
+    # return num hit clusters and mean cluster purity
+    num_hit_clusters <- sum(purity_df$hit_cluster)
+    mean_pct_hits <- mean(purity_df %>% 
+                            dplyr::filter(hit_cluster == T) %>%
+                            dplyr::pull(pct_cluster_hits), na.rm = T)
+    num_hit_in_top <- sum(purity_df_top$hit_cluster, na.rm = T)
+
+    return(list('purity_df' = purity_df,
+                'num_hit_clusters' = num_hit_clusters,
+                'mean_pct_hits' = mean_pct_hits,
+                'num_top_hits' = num_hit_in_top,
+                'top_threshold' = num_top))
+  }
+
 evaluation_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
   
   # get AUPRC baseline - fraction of positive events
@@ -244,7 +278,15 @@ if (TOOL ==  'cdr3_similarity'){
     readr::write_tsv(cdr3_sim, file.path('tables', 'combined_res.tsv.gz'))
 
     if (AUC_VAR != FALSE){
-        
+
+        message('Getting cluster purity information for CDRH3 Similarity...')
+        # get purity info
+        cdr3sim_purity_stat_list_fisher <- save_purity_stats(cdr3_sim, 'convergent_clone_id_full', AUC_VAR, 'p_value_fisher')
+        cdr3sim_purity_stat_list_wilcox <- save_purity_stats(cdr3_sim, 'convergent_clone_id_full', AUC_VAR, 'p_value_wilcox')
+
+        readr::write_tsv(cdr3sim_purity_stat_list_fisher$purity_df, file.path('tables', 'purity_stats_fisher.tsv'))
+        readr::write_tsv(cdr3sim_purity_stat_list_wilcox$purity_df, file.path('tables', 'purity_stats_wilcox.tsv'))
+
         message('Calculating CDRH3 Similarity AUC curves...')
 
         p_cdr3_fisher_asc <- evaluation_curve(cdr3_sim, 'p_value_fisher', AUC_VAR, tool = 'CDRH3 Similarity + Fisher')
@@ -290,7 +332,15 @@ if (TOOL ==  'cdr3_similarity'){
                                   AUPRC = c(p_cdr3_fisher_asc$auprc,
                                             p_cdr3_wilcox_asc$auprc),
                                   FDR = c(calc_FDR(cdr3_sim, 'agg_fdr_fisher', AUC_VAR, 0.05),
-                                          calc_FDR(cdr3_sim, 'agg_fdr_wilcox', AUC_VAR, 0.05)))
+                                          calc_FDR(cdr3_sim, 'agg_fdr_wilcox', AUC_VAR, 0.05)),
+                                  num_hit_clusters = c(cdr3sim_purity_stat_list_fisher$num_hit_clusters,
+                                                       cdr3sim_purity_stat_list_wilcox$num_hit_clusters),
+                                  mean_pct_hits = c(cdr3sim_purity_stat_list_fisher$mean_pct_hits,
+                                                    cdr3sim_purity_stat_list_wilcox$mean_pct_hits),
+                                  num_top_hits = c(cdr3sim_purity_stat_list_fisher$num_top_hits,
+                                                   cdr3sim_purity_stat_list_wilcox$num_top_hits),
+                                  top_threshold = c(cdr3sim_purity_stat_list_fisher$top_threshold,
+                                                    cdr3sim_purity_stat_list_wilcox$top_threshold))
 
         write_tsv(all_auc_res, file.path('tables', 'ASC_evaluation_summary.tsv'))
     }
@@ -334,9 +384,20 @@ if (TOOL == 'DA-seq'){
     readr::write_tsv(daseq, file.path('tables', 'combined_res.tsv.gz'))
 
     if (AUC_VAR != FALSE){
+
+        message('Getting cluster purity information for DA-Seq...')
+        # get purity info
+        daseq_purity_stat_list_fisher <- save_purity_stats(daseq, 'da.region.label.full', AUC_VAR, 'p_value_fisher')
+        daseq_purity_stat_list_wilcox_onesided <- save_purity_stats(daseq, 'da.region.label.full', AUC_VAR, 'p_value_wilcox_onesided')
+        daseq_purity_stat_list_wilcox <- save_purity_stats(daseq, 'da.region.label.full', AUC_VAR, 'pval.wilcoxon')
+
+        readr::write_tsv(daseq_purity_stat_list_fisher$purity_df, file.path('tables', 'purity_stats_fisher.tsv'))
+        readr::write_tsv(daseq_purity_stat_list_wilcox_onesided$purity_df, file.path('tables', 'purity_stats_wilcox_onesided.tsv'))
+        readr::write_tsv(daseq_purity_stat_list_wilcox$purity_df, file.path('tables', 'purity_stats_wilcox.tsv'))
+
         message('Calculating DA-Seq AUC curves...')
 
-        p_daseq <- evaluation_curve(daseq, 'wilcox.adj.BH', AUC_VAR, tool = 'DA-seq')
+        p_daseq <- evaluation_curve(daseq, 'pval.wilcoxon', AUC_VAR, tool = 'DA-seq')
 
         ggsave(file.path('figures', 'DAseq_ASC_AUROC.png'),
                p_daseq$plot_auroc,
@@ -355,7 +416,7 @@ if (TOOL == 'DA-seq'){
 
         ###
 
-        p_daseq_onesided <- evaluation_curve(daseq, 'fdr_wilcox_onesided', AUC_VAR, tool = 'DA-seq + OS Wilcoxon')
+        p_daseq_onesided <- evaluation_curve(daseq, 'p_value_wilcox_onesided', AUC_VAR, tool = 'DA-seq + OS Wilcoxon')
 
         ggsave(file.path('figures', 'DAseq_ASC_OS_WILCOX_AUROC.png'),
             p_daseq_onesided$plot_auroc,
@@ -402,7 +463,19 @@ if (TOOL == 'DA-seq'){
                                             p_daseq_onesided$auprc),
                                   FDR = c(calc_FDR(daseq, 'agg_fdr_wilcox', AUC_VAR, 0.05),
                                           calc_FDR(daseq, 'agg_fdr_fisher', AUC_VAR, 0.05),
-                                          calc_FDR(daseq, 'agg_fdr_wilco_onesided', AUC_VAR, 0.05)))
+                                          calc_FDR(daseq, 'agg_fdr_wilco_onesided', AUC_VAR, 0.05)),
+                                  num_hit_clusters = c(daseq_purity_stat_list_wilcox$num_hit_clusters,
+                                                       daseq_purity_stat_list_fisher$num_hit_clusters,
+                                                       daseq_purity_stat_list_wilcox_onesided$num_hit_clusters),
+                                  mean_pct_hits = c(daseq_purity_stat_list_wilcox$mean_pct_hits,
+                                                    daseq_purity_stat_list_fisher$mean_pct_hits,
+                                                    daseq_purity_stat_list_wilcox_onesided$mean_pct_hits),
+                                  num_top_hits = c(daseq_purity_stat_list_wilcox$num_top_hits,
+                                                   daseq_purity_stat_list_fisher$num_top_hits,
+                                                   daseq_purity_stat_list_wilcox_onesided$num_top_hits),
+                                  top_threshold = c(daseq_purity_stat_list_wilcox$top_threshold,
+                                                    daseq_purity_stat_list_fisher$top_threshold,
+                                                    daseq_purity_stat_list_wilcox_onesided$top_threshold))
 
         write_tsv(all_auc_res, file.path('tables', 'ASC_evaluation_summary.tsv'))
     }
@@ -447,6 +520,14 @@ if (TOOL == 'Milo'){
     readr::write_tsv(milo, file.path('tables', 'combined_res.tsv.gz'))
 
     if (AUC_VAR != FALSE){
+
+        message('Getting cluster purity information for Milo...')
+        # get purity info
+        milo_purity_stat_list <- save_purity_stats(milo %>% dplyr::filter(!is.na(sequence_id)), 
+                                                          'nhood_id', AUC_VAR, 'min_nhood_FDR')
+        
+        readr::write_tsv(milo_purity_stat_list$purity_df, file.path('tables', 'purity_stats.tsv'))
+
         message('Calculating Milo AUC curve...')
 
         p_milo <- evaluation_curve(milo %>% dplyr::filter(!is.na(sequence_id)), 'min_nhood_FDR', 
@@ -471,7 +552,11 @@ if (TOOL == 'Milo'){
                                   AUROC = c(p_milo$auroc),
                                   AUPRC = c(p_milo$auprc),
                                   FDR = c(calc_FDR(milo %>% dplyr::filter(!is.na(sequence_id)), 
-                                                  'agg_fdr', AUC_VAR, 0.05)))
+                                                  'agg_fdr', AUC_VAR, 0.05)),
+                                  num_hit_clusters = milo_purity_stat_list$num_hit_clusters,
+                                  mean_pct_hits = milo_purity_stat_list$mean_pct_hits,
+                                  num_top_hits = milo_purity_stat_list$num_top_hits,
+                                  top_threshold = milo_purity_stat_list$top_threshold)
 
         write_tsv(all_auc_res, file.path('tables', 'ASC_evaluation_summary.tsv'))
     }
@@ -515,6 +600,15 @@ if (TOOL == 'BCRdist'){
     readr::write_tsv(bcrdist, file.path('tables', 'combined_res.tsv.gz'))
 
     if (AUC_VAR != FALSE){
+
+        message('Getting cluster purity information for BCRdist...')
+        # get purity info
+        bcrdist_purity_stat_list_fisher <- save_purity_stats(bcrdist, 'convergent_clone_id_full', AUC_VAR, 'p_value_fisher')
+        bcrdist_purity_stat_list_wilcox <- save_purity_stats(bcrdist, 'convergent_clone_id_full', AUC_VAR, 'p_value_wilcox')
+
+        readr::write_tsv(bcrdist_purity_stat_list_fisher$purity_df, file.path('tables', 'purity_stats_fisher.tsv'))
+        readr::write_tsv(bcrdist_purity_stat_list_wilcox$purity_df, file.path('tables', 'purity_stats_wilcox.tsv'))
+
         message('Calculating BCRdist AUC curves...')
 
         p_bcrdist_fisher_asc <- evaluation_curve(bcrdist, 'p_value_fisher', AUC_VAR, tool = 'BCRdist + Fisher')
@@ -560,7 +654,15 @@ if (TOOL == 'BCRdist'){
                                   AUPRC = c(p_bcrdist_fisher_asc$auprc,
                                             p_bcrdist_wilcox_asc$auprc),
                                   FDR = c(calc_FDR(bcrdist, 'agg_fdr_fisher', AUC_VAR, 0.05),
-                                          calc_FDR(bcrdist, 'agg_fdr_wilcox', AUC_VAR, 0.05)))
+                                          calc_FDR(bcrdist, 'agg_fdr_wilcox', AUC_VAR, 0.05)),
+                                  num_hit_clusters = c(bcrdist_purity_stat_list_fisher$num_hit_clusters,
+                                                       bcrdist_purity_stat_list_wilcox$num_hit_clusters),
+                                  mean_pct_hits = c(bcrdist_purity_stat_list_fisher$mean_pct_hits,
+                                                    bcrdist_purity_stat_list_wilcox$mean_pct_hits),
+                                  num_top_hits = c(bcrdist_purity_stat_list_fisher$num_top_hits,
+                                                   bcrdist_purity_stat_list_wilcox$num_top_hits),
+                                  top_threshold = c(bcrdist_purity_stat_list_fisher$top_threshold,
+                                                    bcrdist_purity_stat_list_wilcox$top_threshold))
 
         write_tsv(all_auc_res, file.path('tables', 'ASC_evaluation_summary.tsv'))
     }
