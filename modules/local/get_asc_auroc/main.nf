@@ -9,8 +9,8 @@ process GET_ASC_AUROC{
 
     output:
     path "tables/combined_res.tsv.gz", emit: combined_res
-    path "tables/*.tsv", emit: auc_files
-    path "figures/*.png", emit: figs
+    path "tables/*.tsv", emit: auc_files, optional: true
+    path "figures/*.png", emit: figs, optional: true
 
     script:
     """
