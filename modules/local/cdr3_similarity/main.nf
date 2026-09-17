@@ -27,6 +27,7 @@ process CDR3_SIMILARITY{
     -dg ${params.disease_gp} \
     -t 0.15 \
     -l "single" \
+    -c ${params.cdr3_sim_nproc} \
     -a ${params.auc_variable} \
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \
@@ -65,6 +66,7 @@ process CDR3_SIMILARITY_ASC{
     -dg ${params.disease_gp} \
     -t 0.15 \
     -l "single" \
+    -c ${params.cdr3_sim_nproc} \
     -a ${params.auc_variable} \
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \

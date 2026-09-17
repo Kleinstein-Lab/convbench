@@ -563,8 +563,8 @@ parser$add_argument('-t', '--cluster_threshold', type = 'double', default = '0.1
 parser$add_argument('-l', '--linkage_method', type = 'character', default = 'single',
                     help = 'The linkage method to be used in forming clusters.')
 
-# parser$add_argument('-c', '--cpu', type = 'integer', default = 1,
-#                     help = 'Specify the number of cpus used to do hierarchical clustering.')
+parser$add_argument('-c', '--cpu', type = 'integer', default = 16,
+                    help = 'Specify the number of cpus used to do hierarchical clustering (default nproc = 16).')
 
 parser$add_argument('-a', '--auc_var', type = 'character', default = FALSE,
                     help = 'Specify which column should be used for generating AUC curve (i.e. "simulated" or "binder"). Column type should be logical. If no AUC variable, set to FALSE.')
@@ -594,7 +594,7 @@ DISEASE_GP <- args$disease_group
 
 THRESH <- args$cluster_threshold
 LINKAGE <- args$linkage_method
-# CPUS <- args$cpu
+CPUS <- args$cpu
 
 VDJ <- args$vdj_info
 SINGLE_CELL <- args$single_cell
@@ -713,6 +713,10 @@ if (REMOVE_DUPS){
 }
 
 # measure how long the Mal-ID process itself takes
+message(paste0('Starting hierarchical clustering with ', CPUS, ' processors.'))
+message(paste0('Linkage method: ', LINKAGE))
+message(paste0('Threshold: ', THRESH))
+
 start_time <- Sys.time()
 
 # STRATEGY IF WE HAVE A HIGHER SAMPLE SIZE
@@ -743,7 +747,7 @@ if (SINGLE_CELL){
                                                   cdr3=FALSE, 
                                                   mod3=FALSE,
                                                   max_n=0, 
-                                                  nproc=16,
+                                                  nproc=CPUS,
                                                   verbose=T, log=NULL,
                                                   summarize_clones=FALSE)
   
@@ -766,11 +770,12 @@ if (SINGLE_CELL){
                                                   cdr3=FALSE, 
                                                   mod3=FALSE,
                                                   max_n=0, 
-                                                  nproc=16,
+                                                  nproc=CPUS,
                                                   verbose=T, log=NULL,
                                                   summarize_clones=FALSE)
 }
 
+message('Hierarchical clustering complete.')
 
 convergent_clones$clone_id_full <- paste(convergent_clones$convergent_clone_id, convergent_clones$subject_id, sep ='_')
 
