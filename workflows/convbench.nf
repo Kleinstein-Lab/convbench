@@ -6,6 +6,8 @@
 include { SPLIT_BY_ASC                                            } from '../modules/local/split_by_asc/main'
 include { CDR3_SIMILARITY                                         } from '../modules/local/cdr3_similarity/main'
 include { CDR3_SIMILARITY_ASC                                     } from '../modules/local/cdr3_similarity/main'
+include { CDR3_SIMILARITY as CDR3_SIMILARITY_FIRSTV               } from '../modules/local/cdr3_similarity/main'
+include { CDR3_SIMILARITY_ASC as CDR3_SIMILARITY_ASC_FIRSTV       } from '../modules/local/cdr3_similarity/main'
 include { MILO                                                    } from '../modules/local/milo/main'
 include { MILO_ASC                                                } from '../modules/local/milo/main'
 include { DASEQ                                                   } from '../modules/local/daseq/main'
@@ -14,6 +16,7 @@ include { BCRDIST                                                 } from '../mod
 include { BCRDIST_ASC                                             } from '../modules/local/bcrdist/main'
 include { MULTIQC                                                 } from '../modules/nf-core/multiqc/main'
 include { GET_ASC_AUROC as GET_CDR3_SIMILARITY_ASC_AUROC          } from '../modules/local/get_asc_auroc/main'
+include { GET_ASC_AUROC as GET_CDR3_SIMILARITY_ASC_FIRSTV_AUROC   } from '../modules/local/get_asc_auroc/main'
 include { GET_ASC_AUROC as GET_MILO_ASC_AUROC                     } from '../modules/local/get_asc_auroc/main'
 include { GET_ASC_AUROC as GET_DASEQ_ASC_AUROC                    } from '../modules/local/get_asc_auroc/main'
 include { GET_ASC_AUROC as GET_BCRDIST_ASC_AUROC                  } from '../modules/local/get_asc_auroc/main'
@@ -113,6 +116,32 @@ workflow CONVBENCH {
             )
         }
     }
+
+    //
+    // MODULE: Run CDR3_similarity_firstv
+    //
+    if (params.conv_tools && params.conv_tools.split(',').contains('cdr3_similarity_firstv')){
+        if(params.asc_mode){
+
+            cdr3_sim_asc_result = CDR3_SIMILARITY_ASC_FIRSTV(ch_file_pairs)
+
+            def tool_id = 'cdr3_similarity_firstv'
+
+            cdr3_sim_asc_input = cdr3_sim_asc_result.auc_input
+                .map{meta_id, seq_file ->
+                    tuple(tool_id, meta_id, seq_file)
+                }
+                .groupTuple(by: [0, 1])
+
+            GET_CDR3_SIMILARITY_ASC_FIRSTV_AUROC(cdr3_sim_asc_input)
+        
+        } else{
+            CDR3_SIMILARITY_FIRSTV(
+                ch_samplesheet
+            )
+        }
+    }
+
 
     //
     // MODULE: Run Milo

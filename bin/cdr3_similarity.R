@@ -578,6 +578,9 @@ parser$add_argument('-sc', '--single_cell', type = 'logical', default = FALSE,
 parser$add_argument('-r', '--remove_dups', type = 'logical', default = FALSE,
                     help = 'Will remove duplicate embeddings within an individual if TRUE.')
 
+parser$add_argument('-f', '--first', type = 'logical', default = FALSE,
+                    help = 'Specify whether to consider only the first occurrence of each clone.')
+
 
 # Parse the arguments
 args <- parser$parse_args()
@@ -600,6 +603,7 @@ VDJ <- args$vdj_info
 SINGLE_CELL <- args$single_cell
 AUC_VAR <- args$auc_var
 REMOVE_DUPS <- args$remove_dups
+FIRST <- args$first
 
 if (AUC_VAR != FALSE){
   message(paste0('AUC variable ', AUC_VAR, ' will be used.'))
@@ -743,7 +747,7 @@ if (SINGLE_CELL){
                                                   locus="locus",
                                                   only_heavy=FALSE,
                                                   split_light=FALSE,
-                                                  first=FALSE,
+                                                  first=FIRST,
                                                   cdr3=FALSE, 
                                                   mod3=FALSE,
                                                   max_n=0, 
@@ -766,7 +770,7 @@ if (SINGLE_CELL){
                                                   locus="locus",
                                                   only_heavy=TRUE,
                                                   split_light=FALSE,
-                                                  first=FALSE,
+                                                  first=FIRST,
                                                   cdr3=FALSE, 
                                                   mod3=FALSE,
                                                   max_n=0, 

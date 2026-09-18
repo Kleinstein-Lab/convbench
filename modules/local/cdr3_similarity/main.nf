@@ -19,6 +19,7 @@ process CDR3_SIMILARITY{
     path "figures/*.png", emit: figs
 
     script:
+    def args = task.ext.args ? task.ext.args : ""
     """
     cdr3_similarity.R \
     -md $airr \
@@ -32,7 +33,7 @@ process CDR3_SIMILARITY{
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \
     -r ${params.remove_dups} \
-    
+    ${args}
 
     """
 }
@@ -57,6 +58,7 @@ process CDR3_SIMILARITY_ASC{
     path "figures/*.png", emit: figs
 
     script:
+    def args = task.ext.args ? task.ext.args : ""
     """
     cdr3_similarity.R \
     -md $airr \
@@ -71,6 +73,7 @@ process CDR3_SIMILARITY_ASC{
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \
     -r ${params.remove_dups} \
+    ${args}
 
     """
 }
