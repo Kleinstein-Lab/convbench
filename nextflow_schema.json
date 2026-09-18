@@ -14,7 +14,7 @@
             "properties": {
                 "conv_tools": {
                     "type": "string",
-                    "description": "Comma-separated list of convergence tools to run of cdr3_similarity, milo, daseq, bcrdist"
+                    "description": "Comma-separated list of convergence tools to run of cdr3_similarity, cdr3_similarity_firstv, milo, daseq, bcrdist"
                 },
                 "da_variable": {
                     "type": "string",
