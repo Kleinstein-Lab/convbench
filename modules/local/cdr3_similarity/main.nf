@@ -22,12 +22,12 @@ process CDR3_SIMILARITY{
     def args = task.ext.args ? task.ext.args : ""
     """
     cdr3_similarity.R \
-    -md $airr \
+    -md ${airr} \
     -o . \
     -da ${params.da_variable} \
     -dg ${params.disease_gp} \
-    -t 0.15 \
-    -l "single" \
+    -t ${meta.threshold} \
+    -l ${meta.linkage} \
     -c ${params.cdr3_sim_nproc} \
     -a ${params.auc_variable} \
     -v ${params.vdj_info} \
@@ -39,16 +39,16 @@ process CDR3_SIMILARITY{
 }
 
 process CDR3_SIMILARITY_ASC{
-    tag "${meta_id}_${asc_id}"
+    tag "${meta.id}_${meta.asc_id}"
     label 'process_medium'
 
     container "docker.io/cfsullivan16/cdr3similarity:1.0.0dev"
 
     input:
-    tuple val(meta_id), val(asc_id), path(airr), path(embedding), path(library_sizes)
+    tuple val(meta), path(airr), path(embedding)
 
     output:
-    tuple val(meta_id), path("tables/*_seq_summary.tsv"), emit: auc_input
+    tuple val(meta.id), path("tables/*_seq_summary.tsv"), emit: auc_input
     path "tables/run_stats.tsv", emit: run_stats
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
     path "tables/cluster_subj_summary.tsv", emit: cluster_subj_summary
@@ -61,13 +61,13 @@ process CDR3_SIMILARITY_ASC{
     def args = task.ext.args ? task.ext.args : ""
     """
     cdr3_similarity.R \
-    -md $airr \
-    -li $library_sizes \
+    -md ${airr} \
+    -li ${meta.library_sizes} \
     -o . \
     -da ${params.da_variable} \
     -dg ${params.disease_gp} \
-    -t 0.15 \
-    -l "single" \
+    -t ${meta.threshold} \
+    -l ${meta.linkage} \
     -c ${params.cdr3_sim_nproc} \
     -a ${params.auc_variable} \
     -v ${params.vdj_info} \

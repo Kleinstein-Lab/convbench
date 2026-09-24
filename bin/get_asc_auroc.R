@@ -241,7 +241,7 @@ calc_FDR <- function(results_table, p_val_col, auc_variable, alpha){
 # dependent on the input tool
 
 ##### CDR3 SIM #####
-if (TOOL ==  'cdr3_similarity'){
+if (TOOL ==  'cdr3_similarity' | TOOL == 'cdr3_similarity_firstv'){
     # gather ASC files and create combined results file
     message('Combining ASC results for CDR3 similarity...')
 
@@ -279,6 +279,14 @@ if (TOOL ==  'cdr3_similarity'){
 
     if (AUC_VAR != FALSE){
 
+        if (TOOL == 'cdr3_similarity'){
+          tool_lab <- 'CDRH3 Similarity'
+          plot_lab <- 'CDR3SIM'
+        } else if (TOOL == 'cdr3_similarity_firstv'){
+          tool_lab <- 'CDRH3 Similarity - First V'
+          plot_lab <- 'CDR3SIMFIRSTV'
+        }
+
         message('Getting cluster purity information for CDRH3 Similarity...')
         # get purity info
         cdr3sim_purity_stat_list_fisher <- save_purity_stats(cdr3_sim, 'convergent_clone_id_full', AUC_VAR, 'p_value_fisher')
@@ -289,44 +297,44 @@ if (TOOL ==  'cdr3_similarity'){
 
         message('Calculating CDRH3 Similarity AUC curves...')
 
-        p_cdr3_fisher_asc <- evaluation_curve(cdr3_sim, 'p_value_fisher', AUC_VAR, tool = 'CDRH3 Similarity + Fisher')
+        p_cdr3_fisher_asc <- evaluation_curve(cdr3_sim, 'p_value_fisher', AUC_VAR, tool = paste0(tool_lab, ' + Fisher'))
 
-        ggsave(file.path('figures', 'CDR3SIM_ASC_FISHER_AUROC.png'),
+        ggsave(file.path('figures', paste0(plot_lab, '_ASC_FISHER_AUROC.png')),
             p_cdr3_fisher_asc$plot_auroc,
             device = 'png',
             width = 7,
             height = 6)
         
-        ggsave(file.path('figures', 'CDR3SIM_ASC_FISHER_AUPRC.png'),
+        ggsave(file.path('figures', paste0(plot_lab, '_ASC_FISHER_AUPRC.png')),
             p_cdr3_fisher_asc$plot_auprc,
             device = 'png',
             width = 7,
             height = 6)
 
-        write.table(p_cdr3_fisher_asc$table, file.path('tables', 'CDR3SIM_ASC_FISHER_EVALUATION.tsv'), sep = '\t',
+        write.table(p_cdr3_fisher_asc$table, file.path('tables', paste0(plot_lab, '_ASC_FISHER_EVALUATION.tsv')), sep = '\t',
                     row.names = F, quote = F)
 
         ###
 
-        p_cdr3_wilcox_asc <- evaluation_curve(cdr3_sim, 'p_value_wilcox', AUC_VAR, tool = 'CDRH3 Similarity + Wilcoxon')
+        p_cdr3_wilcox_asc <- evaluation_curve(cdr3_sim, 'p_value_wilcox', AUC_VAR, tool = paste0(tool_lab, ' + Fisher'))
 
-        ggsave(file.path('figures', 'CDR3SIM_ASC_WILCOX_AUROC.png'),
+        ggsave(file.path('figures', paste0(plot_lab, '_ASC_WILCOX_AUROC.png')),
             p_cdr3_wilcox_asc$plot_auroc,
             device = 'png',
             width = 7,
             height = 6)
 
-        ggsave(file.path('figures', 'CDR3SIM_ASC_WILCOX_AUPRC.png'),
+        ggsave(file.path('figures', paste0(plot_lab, '_ASC_WILCOX_AUPRC.png')),
             p_cdr3_wilcox_asc$plot_auprc,
             device = 'png',
             width = 7,
             height = 6)
 
-        write.table(p_cdr3_wilcox_asc$table, file.path('tables', 'CDR3SIM_ASC_WILCOX_EVALUATION.tsv'), sep = '\t',
+        write.table(p_cdr3_wilcox_asc$table, file.path('tables', paste0(plot_lab, '_ASC_WILCOX_EVALUATION.tsv')), sep = '\t',
                     row.names = F, quote = F)
 
-        all_auc_res <- data.frame(tool = c('CDRH3 Similarity + Fisher',
-                                           'CDRH3 Similarity + Wilcoxon'),
+        all_auc_res <- data.frame(tool = c(paste0(tool_lab, ' + Fisher'),
+                                           paste0(tool_lab, ' + Wilcoxon')),
                                   AUROC = c(p_cdr3_fisher_asc$auroc,
                                             p_cdr3_wilcox_asc$auroc),
                                   AUPRC = c(p_cdr3_fisher_asc$auprc,
