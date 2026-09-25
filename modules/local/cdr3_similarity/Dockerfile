@@ -18,6 +18,6 @@ RUN conda env create -f /environment.yml && conda clean -a
 
 ENV PATH=/opt/conda/envs/cdr3_similarity/bin:$PATH
 
-RUN Rscript -e "pak::pak('alakazam@1.4.3')"
+RUN Rscript -e "pak::pkg_install('immcantation/alakazam@master')"
 RUN Rscript -e "pak::pak('shazam@1.3.2')"
-RUN Rscript -e "pak::pak('scoper@1.5.0')"
+RUN Rscript -e "pak::pak('immcantation/scoper@master')"

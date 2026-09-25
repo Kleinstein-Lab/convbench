@@ -2,7 +2,7 @@ process CDR3_SIMILARITY{
     tag "${meta.id}"
     label 'process_medium'
 
-    container "docker.io/cfsullivan16/cdr3similarity:1.0.0dev"
+    container "docker.io/cfsullivan16/cdr3similarity:1.1.0dev"
 
     input:
     tuple val(meta), path(airr), path(embedding)
@@ -42,7 +42,7 @@ process CDR3_SIMILARITY_ASC{
     tag "${meta_id}_${asc_id}"
     label 'process_medium'
 
-    container "docker.io/cfsullivan16/cdr3similarity:1.0.0dev"
+    container "docker.io/cfsullivan16/cdr3similarity:1.1.0dev"
 
     input:
     tuple val(meta_id), val(asc_id), path(airr), path(embedding), path(library_sizes)
