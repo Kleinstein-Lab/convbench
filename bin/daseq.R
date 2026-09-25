@@ -1276,7 +1276,11 @@ fisher_table <- get_combined_fisher_exact_table(hier_clone_df = X.cells,
                                                 subj_summary = lib_sizes,
                                                 filter = FALSE)
 
-write.table(fisher_table, file.path(OUTPUT_DIR, 'tables', 'fisher_table.tsv'), 
+# region 0 holds sequences not in any DA region, so it is not tested (same as Wilcoxon)
+fisher_table[fisher_table$da.region.label == '0', c('p_value', 'odds_ratio')] <- NA
+fisher_table$fdr <- p.adjust(fisher_table$p_value, method = 'fdr')
+
+write.table(fisher_table, file.path(OUTPUT_DIR, 'tables', 'fisher_table.tsv'),
             sep="\t", quote = F, row.names = F)
 
 fisher_sum <- fisher_table[c('da.region.label', 'p_value', 'fdr')]
