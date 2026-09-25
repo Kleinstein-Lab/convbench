@@ -364,17 +364,22 @@ if (TOOL == 'DA-seq'){
 
       asc_id <- stringr::str_split_i(basename(f), '_da_seqs', 1)
 
+      # region 0 holds sequences not in any DA region, so it is not a real cluster
       df <- df %>%
         dplyr::mutate(ASC = asc_id,
-                      da.region.label.full = paste0(ASC, '_', da.region.label))
+                      da.region.label.full = dplyr::if_else(da.region.label == 0, NA_character_,
+                                                            paste0(ASC, '_', da.region.label)))
 
       return(df)
     })
-    
+
     daseq <- do.call(rbind, res_files)
 
     # get new corrected p-values
-    cluster_results <- daseq[c('da.region.label.full', 'pval.wilcoxon', 'pval.ttest', 'p_value_fisher', 'p_value_wilcox_onesided')] %>% distinct()
+    cluster_results <- daseq %>%
+                        dplyr::filter(!is.na(da.region.label.full)) %>%
+                        dplyr::select(c('da.region.label.full', 'pval.wilcoxon', 'pval.ttest', 'p_value_fisher', 'p_value_wilcox_onesided')) %>%
+                        distinct()
 
     # get correction for aggregated result
     cluster_results$agg_fdr_fisher <- p.adjust(cluster_results$p_value_fisher, method = 'BH')
@@ -395,9 +400,12 @@ if (TOOL == 'DA-seq'){
 
         message('Getting cluster purity information for DA-Seq...')
         # get purity info
-        daseq_purity_stat_list_fisher <- save_purity_stats(daseq, 'da.region.label.full', AUC_VAR, 'p_value_fisher')
-        daseq_purity_stat_list_wilcox_onesided <- save_purity_stats(daseq, 'da.region.label.full', AUC_VAR, 'p_value_wilcox_onesided')
-        daseq_purity_stat_list_wilcox <- save_purity_stats(daseq, 'da.region.label.full', AUC_VAR, 'pval.wilcoxon')
+        # exclude sequences not in any DA region
+        daseq_clustered <- daseq %>% dplyr::filter(!is.na(da.region.label.full))
+
+        daseq_purity_stat_list_fisher <- save_purity_stats(daseq_clustered, 'da.region.label.full', AUC_VAR, 'p_value_fisher')
+        daseq_purity_stat_list_wilcox_onesided <- save_purity_stats(daseq_clustered, 'da.region.label.full', AUC_VAR, 'p_value_wilcox_onesided')
+        daseq_purity_stat_list_wilcox <- save_purity_stats(daseq_clustered, 'da.region.label.full', AUC_VAR, 'pval.wilcoxon')
 
         readr::write_tsv(daseq_purity_stat_list_fisher$purity_df, file.path('tables', 'purity_stats_fisher.tsv'))
         readr::write_tsv(daseq_purity_stat_list_wilcox_onesided$purity_df, file.path('tables', 'purity_stats_wilcox_onesided.tsv'))
@@ -497,11 +505,23 @@ if (TOOL == 'Milo'){
 
       df <- readr::read_tsv(f, show_col_types = F)
 
-     asc_id <- stringr::str_split_i(basename(f), '_seq_results', 1)
+      asc_id <- stringr::str_split_i(basename(f), '_seq_results', 1)
 
+      milo_test_cols <- c('fisher_PValue', 'wilcox_PValue', 
+                          'fisher_raw_min_nhood_id', 'fisher_raw_min_nhood_PValue',
+                          'wilcox_min_nhood_id', 'wilcox_min_nhood_FDR')
+      missing_cols <- setdiff(milo_test_cols, colnames(df))
+      
+      if (length(missing_cols) > 0){
+        stop(paste0('Fisher and Wilcoxon columns missing from ', f, ': ', paste(missing_cols, collapse = ', '), 
+                    '. Re-run Milo with the current version of milo.R.'))
+      }
+
+      # keep sequences with no neighborhood as NA rather than '<ASC>_NA'
       df <- df %>%
         dplyr::mutate(ASC = asc_id,
-                      nhood_id = paste0(ASC, '_', nhood_id))
+                      dplyr::across(c(nhood_id, fisher_raw_min_nhood_id, wilcox_min_nhood_id),
+                                    ~ dplyr::if_else(is.na(.x), NA_character_, paste0(ASC, '_', .x))))
 
       return(df)
     })
@@ -514,31 +534,47 @@ if (TOOL == 'Milo'){
     # get new corrected p-values on ALL nhoods (not just ones in min_nhood_ID)
     cluster_results <- milo %>%
                         dplyr::filter(!is.na(nhood_id)) %>%
-                        dplyr::select(c('nhood_id', 'PValue')) %>% 
+                        dplyr::select(c('nhood_id', 'PValue', 'fisher_PValue', 'wilcox_PValue')) %>% 
                         distinct()
 
-    # get correction for aggregated result
+    # get correction for aggregated result - spatial FDR cannot be calculated across ASCs,
+    # so use BH on the nominal p-values
     cluster_results$agg_fdr <- p.adjust(cluster_results$PValue, method = 'BH')
+    cluster_results$agg_fdr_fisher <- p.adjust(cluster_results$fisher_PValue, method = 'BH')
+    cluster_results$agg_fdr_wilcox <- p.adjust(cluster_results$wilcox_PValue, method = 'BH')
 
-    # add back
+    # add back - each test uses the neighborhood its sequences were assigned to
     milo <- milo %>%
       dplyr::left_join(cluster_results[c('nhood_id', 'agg_fdr')], 
-                       by = 'nhood_id', relationship = 'many-to-one')
+                       by = 'nhood_id', relationship = 'many-to-one') %>%
+      dplyr::left_join(cluster_results %>% dplyr::select(fisher_raw_min_nhood_id = nhood_id, agg_fdr_fisher), 
+                       by = 'fisher_raw_min_nhood_id', relationship = 'many-to-one') %>%
+      dplyr::left_join(cluster_results %>% dplyr::select(wilcox_min_nhood_id = nhood_id, agg_fdr_wilcox), 
+                       by = 'wilcox_min_nhood_id', relationship = 'many-to-one')
     
     readr::write_tsv(milo, file.path('tables', 'combined_res.tsv.gz'))
 
     if (AUC_VAR != FALSE){
 
+        # remove neighborhoods with no sequences assigned
+        milo_seqs <- milo %>% dplyr::filter(!is.na(sequence_id))
+
         message('Getting cluster purity information for Milo...')
-        # get purity info
-        milo_purity_stat_list <- save_purity_stats(milo %>% dplyr::filter(!is.na(sequence_id)), 
-                                                          'nhood_id', AUC_VAR, 'min_nhood_FDR')
+        # get purity info - exclude sequences not in any neighborhood
+        milo_purity_stat_list <- save_purity_stats(milo_seqs %>% dplyr::filter(!is.na(nhood_id)), 
+                                                   'nhood_id', AUC_VAR, 'min_nhood_FDR')
+        milo_purity_stat_list_fisher <- save_purity_stats(milo_seqs %>% dplyr::filter(!is.na(fisher_raw_min_nhood_id)), 
+                                                          'fisher_raw_min_nhood_id', AUC_VAR, 'fisher_raw_min_nhood_PValue')
+        milo_purity_stat_list_wilcox <- save_purity_stats(milo_seqs %>% dplyr::filter(!is.na(wilcox_min_nhood_id)), 
+                                                          'wilcox_min_nhood_id', AUC_VAR, 'wilcox_min_nhood_FDR')
         
         readr::write_tsv(milo_purity_stat_list$purity_df, file.path('tables', 'purity_stats.tsv'))
+        readr::write_tsv(milo_purity_stat_list_fisher$purity_df, file.path('tables', 'purity_stats_fisher.tsv'))
+        readr::write_tsv(milo_purity_stat_list_wilcox$purity_df, file.path('tables', 'purity_stats_wilcox.tsv'))
 
-        message('Calculating Milo AUC curve...')
+        message('Calculating Milo AUC curves...')
 
-        p_milo <- evaluation_curve(milo %>% dplyr::filter(!is.na(sequence_id)), 'min_nhood_FDR', 
+        p_milo <- evaluation_curve(milo_seqs, 'min_nhood_FDR', 
                                   AUC_VAR, tool = 'Milo', simplify_p = T)
 
         ggsave(file.path('figures', 'Milo_ASC_AUROC.png'),
@@ -555,16 +591,72 @@ if (TOOL == 'Milo'){
 
         write.table(p_milo$table, file.path('tables', 'Milo_ASC_EVALUATION.tsv'), sep = '\t',
                     row.names = F, quote = F)
+
+        ###
+
+        # Fisher is very conservative, so use nominal p-values for the curve
+        p_milo_fisher <- evaluation_curve(milo_seqs, 'fisher_raw_min_nhood_PValue', 
+                                          AUC_VAR, tool = 'Milo + Fisher', simplify_p = T)
+
+        ggsave(file.path('figures', 'Milo_ASC_FISHER_AUROC.png'),
+                p_milo_fisher$plot_auroc,
+                device = 'png',
+                width = 7,
+                height = 6)
+
+        ggsave(file.path('figures', 'Milo_ASC_FISHER_AUPRC.png'),
+                p_milo_fisher$plot_auprc,
+                device = 'png',
+                width = 7,
+                height = 6)
+
+        write.table(p_milo_fisher$table, file.path('tables', 'Milo_ASC_FISHER_EVALUATION.tsv'), sep = '\t',
+                    row.names = F, quote = F)
+
+        ###
+
+        p_milo_wilcox <- evaluation_curve(milo_seqs, 'wilcox_min_nhood_FDR', 
+                                          AUC_VAR, tool = 'Milo + One-sided Wilcoxon', simplify_p = T)
+
+        ggsave(file.path('figures', 'Milo_ASC_WILCOX_AUROC.png'),
+                p_milo_wilcox$plot_auroc,
+                device = 'png',
+                width = 7,
+                height = 6)
+
+        ggsave(file.path('figures', 'Milo_ASC_WILCOX_AUPRC.png'),
+                p_milo_wilcox$plot_auprc,
+                device = 'png',
+                width = 7,
+                height = 6)
+
+        write.table(p_milo_wilcox$table, file.path('tables', 'Milo_ASC_WILCOX_EVALUATION.tsv'), sep = '\t',
+                    row.names = F, quote = F)
         
-        all_auc_res <- data.frame(tool = c('Milo'),
-                                  AUROC = c(p_milo$auroc),
-                                  AUPRC = c(p_milo$auprc),
-                                  FDR = c(calc_FDR(milo %>% dplyr::filter(!is.na(sequence_id)), 
-                                                  'agg_fdr', AUC_VAR, 0.05)),
-                                  num_hit_clusters = milo_purity_stat_list$num_hit_clusters,
-                                  mean_pct_hits = milo_purity_stat_list$mean_pct_hits,
-                                  num_top_hits = milo_purity_stat_list$num_top_hits,
-                                  top_threshold = milo_purity_stat_list$top_threshold)
+        all_auc_res <- data.frame(tool = c('Milo',
+                                           'Milo + Fisher',
+                                           'Milo + One-sided Wilcoxon'),
+                                  AUROC = c(p_milo$auroc,
+                                            p_milo_fisher$auroc,
+                                            p_milo_wilcox$auroc),
+                                  AUPRC = c(p_milo$auprc,
+                                            p_milo_fisher$auprc,
+                                            p_milo_wilcox$auprc),
+                                  FDR = c(calc_FDR(milo_seqs, 'agg_fdr', AUC_VAR, 0.05),
+                                          calc_FDR(milo_seqs, 'agg_fdr_fisher', AUC_VAR, 0.05),
+                                          calc_FDR(milo_seqs, 'agg_fdr_wilcox', AUC_VAR, 0.05)),
+                                  num_hit_clusters = c(milo_purity_stat_list$num_hit_clusters,
+                                                       milo_purity_stat_list_fisher$num_hit_clusters,
+                                                       milo_purity_stat_list_wilcox$num_hit_clusters),
+                                  mean_pct_hits = c(milo_purity_stat_list$mean_pct_hits,
+                                                    milo_purity_stat_list_fisher$mean_pct_hits,
+                                                    milo_purity_stat_list_wilcox$mean_pct_hits),
+                                  num_top_hits = c(milo_purity_stat_list$num_top_hits,
+                                                   milo_purity_stat_list_fisher$num_top_hits,
+                                                   milo_purity_stat_list_wilcox$num_top_hits),
+                                  top_threshold = c(milo_purity_stat_list$top_threshold,
+                                                    milo_purity_stat_list_fisher$top_threshold,
+                                                    milo_purity_stat_list_wilcox$top_threshold))
 
         write_tsv(all_auc_res, file.path('tables', 'ASC_evaluation_summary.tsv'))
     }

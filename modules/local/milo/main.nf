@@ -9,7 +9,7 @@ process MILO{
 
     output:
     path "tables/run_stats.tsv", emit: run_stats
-    path "tables/evaluation_curve_vals.tsv", emit: auc_vals, optional: true
+    path "tables/evaluation_curve_vals_*.tsv", emit: auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
     path "tables/*_seq_results.tsv", emit: seq_results
     path "tables/min_p_nhoods.tsv", emit: min_p_nhoods
@@ -25,13 +25,13 @@ process MILO{
     -md $airr \
     -o . \
     -da ${params.da_variable} \
+    -dg ${params.disease_gp} \
     -k ${params.milo_k_val} \
     -pr 0.1 \
     -a ${params.auc_variable} \
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \
-    -r ${params.remove_dups} \
-    -w ${params.overwrite}
+    -r ${params.remove_dups}
 
     """
 }
@@ -49,7 +49,7 @@ process MILO_ASC{
     tuple val(meta_id), path("tables/*_seq_results.tsv"), emit: auc_input
     path "tables/min_p_nhoods.tsv", emit: min_p_nhoods
     path "tables/run_stats.tsv", emit: run_stats
-    path "tables/evaluation_curve_vals.tsv", emit: auc_vals, optional: true
+    path "tables/evaluation_curve_vals_*.tsv", emit: auc_vals, optional: true
     path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
     path "tables/da_results.tsv", emit: da_results
     path "tables/nhood_stats.tsv", emit: nhood_stats
@@ -64,13 +64,13 @@ process MILO_ASC{
     -li $library_sizes \
     -o . \
     -da ${params.da_variable} \
+    -dg ${params.disease_gp} \
     -k ${params.milo_k_val} \
     -pr 0.1 \
     -a ${params.auc_variable} \
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \
-    -r ${params.remove_dups} \
-    -w ${params.overwrite}
+    -r ${params.remove_dups}
 
     """
 }
