@@ -244,6 +244,9 @@ evaluate_results <- function(seq_table, p_val_col, auc_variable, name){
   # get auprc
   auprc <- pracma::trapz(auc_df$TPR, auc_df$Precision)
 
+  # get average precision - precision at each threshold weighted by the increase in recall
+  ap <- sum(diff(c(0, auc_df$TPR)) * auc_df$Precision, na.rm = T)
+
   pretty_name <- stringr::str_replace_all(name, '_', ' ')
 
   auc_df %>%
@@ -269,7 +272,7 @@ evaluate_results <- function(seq_table, p_val_col, auc_variable, name){
     geom_point() +
     geom_line() +
     labs(title = paste0(pretty_name, ' threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
-         subtitle = paste0(pretty_name, ' AUPRC: ', round(auprc, 3), '; ',
+         subtitle = paste0(pretty_name, ' AUPRC: ', round(auprc, 3), '; AP: ', round(ap, 3), '; ',
                            prettyNum(valid_cells, big.mark = ",", scientific = FALSE), '/',
                            prettyNum(total_cells, big.mark = ",", scientific = FALSE), ' cells in DA neighborhoods'),
          x = 'Recall') +
@@ -282,7 +285,8 @@ evaluate_results <- function(seq_table, p_val_col, auc_variable, name){
          height = 6)
 
   return(list('AUROC' = auroc,
-              'AUPRC' = auprc))
+              'AUPRC' = auprc,
+              'average_precision' = ap))
 }
 
 calc_FDR <- function(results_table, p_val_col, auc_variable, alpha){
@@ -1183,11 +1187,12 @@ if (AUC_VAR != FALSE){
   stat_table$Jaccard_max_p = c(Jaccard_max_p, NA, NA)
   stat_table$AUROC <- c(glm_eval$AUROC, fisher_eval$AUROC, wilcox_eval$AUROC)
   stat_table$AUPRC <- c(glm_eval$AUPRC, fisher_eval$AUPRC, wilcox_eval$AUPRC)
+  stat_table$average_precision <- c(glm_eval$average_precision, fisher_eval$average_precision, wilcox_eval$average_precision)
   stat_table$FDR <- c(FDR, fisher_FDR, wilcox_FDR)
   
   stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
                              'num_hit_clusters', 'avg_pct_hits',
-                             'AUROC', 'AUPRC', 'FDR', 
+                             'AUROC', 'AUPRC', 'average_precision', 'FDR', 
                              'Jaccard_0.005', 'Jaccard_0.05',
                              'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                              'time (min)', 'subjects', 'depths')]

@@ -491,6 +491,9 @@ evaluate_results <- function(seq_table, p_val_col, cluster_id_col, auc_variable,
 
   # get auprc
   p_auprc <- pracma::trapz(p_auc_df$TPR, p_auc_df$Precision)
+
+  # get average precision - precision at each threshold weighted by the increase in recall
+  p_ap <- sum(diff(c(0, p_auc_df$TPR)) * p_auc_df$Precision, na.rm = T)
   
   pretty_name <- stringr::str_replace_all(name, '_', ' ')
 
@@ -520,7 +523,7 @@ evaluate_results <- function(seq_table, p_val_col, cluster_id_col, auc_variable,
     labs(x = 'Recall',
          y = 'Precision',
          title = paste0(pretty_name, ' threshold ', round(min(p_auc_thresholds)), ' to ', round(max(p_auc_thresholds), 3)),
-         subtitle = paste0(pretty_name, ' AUPRC: ', round(p_auprc, 3), '; ', 
+         subtitle = paste0(pretty_name, ' AUPRC: ', round(p_auprc, 3), '; AP: ', round(p_ap, 3), '; ', 
                            prettyNum(assigned_cells, big.mark = ",", scientific = FALSE), '/', 
                            prettyNum(total_cells, big.mark = ",", scientific = FALSE), ' cells in DA clusters')) + 
     theme_minimal() +
@@ -532,7 +535,8 @@ evaluate_results <- function(seq_table, p_val_col, cluster_id_col, auc_variable,
         height = 6)
 
   return(list('AUROC' = p_auroc,
-              'AUPRC' = p_auprc))
+              'AUPRC' = p_auprc,
+              'average_precision' = p_ap))
 
 }
 
@@ -1411,18 +1415,23 @@ if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   # also do AUC curve with the one-sided Wilcoxon results
   wilcox_onesided_auc <- evaluate_results(X.cells, 'fdr_wilcox_onesided', 'da.region.label', AUC_VAR, 'One-Sided_Wilcoxon')
 
-  stat_table[1, 'AUROC'] <- c(fisher_auc$AUROC)
-  stat_table[2, 'AUROC'] <- c(wilcox_auc$AUROC)
+  # rows: DAseq (Wilcoxon), DAseq + Fisher, DAseq + One-sided Wilcoxon
+  stat_table[1, 'AUROC'] <- c(wilcox_auc$AUROC)
+  stat_table[2, 'AUROC'] <- c(fisher_auc$AUROC)
   stat_table[3, 'AUROC'] <- c(wilcox_onesided_auc$AUROC)
 
-  stat_table[1, 'AUPRC'] <- c(fisher_auc$AUPRC)
-  stat_table[2, 'AUPRC'] <- c(wilcox_auc$AUPRC)
+  stat_table[1, 'AUPRC'] <- c(wilcox_auc$AUPRC)
+  stat_table[2, 'AUPRC'] <- c(fisher_auc$AUPRC)
   stat_table[3, 'AUPRC'] <- c(wilcox_onesided_auc$AUPRC)
 
+  stat_table[1, 'average_precision'] <- c(wilcox_auc$average_precision)
+  stat_table[2, 'average_precision'] <- c(fisher_auc$average_precision)
+  stat_table[3, 'average_precision'] <- c(wilcox_onesided_auc$average_precision)
+
   # get FDR at 0.05 cutoff for FDR
-  stat_table[1, 'FDR'] <- calc_FDR(X.cells, 'fdr_fisher', AUC_VAR, 0.05)
-  stat_table[2, 'FDR'] <- calc_FDR(X.cells, 'wilcox.adj.BH', AUC_VAR, 0.05)
-  stat_table[3, 'FDR'] <- c(X.cells, 'fdr_wilcox_onesided', AUC_VAR, 0.05)
+  stat_table[1, 'FDR'] <- calc_FDR(X.cells, 'wilcox.adj.BH', AUC_VAR, 0.05)
+  stat_table[2, 'FDR'] <- calc_FDR(X.cells, 'fdr_fisher', AUC_VAR, 0.05)
+  stat_table[3, 'FDR'] <- calc_FDR(X.cells, 'fdr_wilcox_onesided', AUC_VAR, 0.05)
   
   ###########
   # JACCARD #
@@ -1557,7 +1566,7 @@ if (AUC_VAR != FALSE & AUC_VAR %in% colnames(X.cells)){
   stat_table$Jaccard_max_p = c(Jaccard_max_p, NA, NA)
   
   stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
-                             'num_hit_clusters', 'avg_pct_hits', 'AUROC', 'AUPRC', 'FDR', 
+                             'num_hit_clusters', 'avg_pct_hits', 'AUROC', 'AUPRC', 'average_precision', 'FDR', 
                              'Jaccard_0.005', 'Jaccard_0.05',
                              'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                              'time (min)', 'subjects', 'depths')]

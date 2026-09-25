@@ -173,7 +173,10 @@ evaluation_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
 
   # get auprc
   auprc <- pracma::trapz(auc_df$TPR, auc_df$Precision)
-  title_auprc <- paste0(tool, '\nAUPRC: ', round(auprc, 2))
+
+  # get average precision - precision at each threshold weighted by the increase in recall
+  ap <- sum(diff(c(0, auc_df$TPR)) * auc_df$Precision, na.rm = T)
+  title_auprc <- paste0(tool, '\nAUPRC: ', round(auprc, 2), '; AP: ', round(ap, 2))
 
   if (invalid_seqs > 0){
     subtitle <- paste0(prettyNum(sum(valid_seqs), big.mark = ",", scientific = FALSE), '/', 
@@ -211,6 +214,7 @@ evaluation_curve <- function(res, p_col, binder_col, tool = '', simplify_p = F){
   
   return(list('auroc' = auroc, 'plot_auroc' = p_auroc, 
               'auprc' = auprc, 'plot_auprc' = p_auprc,
+              'average_precision' = ap,
               'table' = auc_df))
   
 }
@@ -339,6 +343,8 @@ if (TOOL ==  'cdr3_similarity' | TOOL == 'cdr3_similarity_firstv'){
                                             p_cdr3_wilcox_asc$auroc),
                                   AUPRC = c(p_cdr3_fisher_asc$auprc,
                                             p_cdr3_wilcox_asc$auprc),
+                                  average_precision = c(p_cdr3_fisher_asc$average_precision,
+                                                        p_cdr3_wilcox_asc$average_precision),
                                   FDR = c(calc_FDR(cdr3_sim, 'agg_fdr_fisher', AUC_VAR, 0.05),
                                           calc_FDR(cdr3_sim, 'agg_fdr_wilcox', AUC_VAR, 0.05)),
                                   num_hit_clusters = c(cdr3sim_purity_stat_list_fisher$num_hit_clusters,
@@ -477,6 +483,9 @@ if (TOOL == 'DA-seq'){
                                   AUPRC = c(p_daseq$auprc,
                                             p_daseq_fisher$auprc,
                                             p_daseq_onesided$auprc),
+                                  average_precision = c(p_daseq$average_precision,
+                                                        p_daseq_fisher$average_precision,
+                                                        p_daseq_onesided$average_precision),
                                   FDR = c(calc_FDR(daseq, 'agg_fdr_wilcox', AUC_VAR, 0.05),
                                           calc_FDR(daseq, 'agg_fdr_fisher', AUC_VAR, 0.05),
                                           calc_FDR(daseq, 'agg_fdr_wilco_onesided', AUC_VAR, 0.05)),
@@ -642,6 +651,9 @@ if (TOOL == 'Milo'){
                                   AUPRC = c(p_milo$auprc,
                                             p_milo_fisher$auprc,
                                             p_milo_wilcox$auprc),
+                                  average_precision = c(p_milo$average_precision,
+                                                        p_milo_fisher$average_precision,
+                                                        p_milo_wilcox$average_precision),
                                   FDR = c(calc_FDR(milo_seqs, 'agg_fdr', AUC_VAR, 0.05),
                                           calc_FDR(milo_seqs, 'agg_fdr_fisher', AUC_VAR, 0.05),
                                           calc_FDR(milo_seqs, 'agg_fdr_wilcox', AUC_VAR, 0.05)),
@@ -753,6 +765,8 @@ if (TOOL == 'BCRdist'){
                                             p_bcrdist_wilcox_asc$auroc),
                                   AUPRC = c(p_bcrdist_fisher_asc$auprc,
                                             p_bcrdist_wilcox_asc$auprc),
+                                  average_precision = c(p_bcrdist_fisher_asc$average_precision,
+                                                        p_bcrdist_wilcox_asc$average_precision),
                                   FDR = c(calc_FDR(bcrdist, 'agg_fdr_fisher', AUC_VAR, 0.05),
                                           calc_FDR(bcrdist, 'agg_fdr_wilcox', AUC_VAR, 0.05)),
                                   num_hit_clusters = c(bcrdist_purity_stat_list_fisher$num_hit_clusters,

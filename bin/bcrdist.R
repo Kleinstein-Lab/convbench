@@ -565,6 +565,9 @@ evaluate_results <- function(results_table, seq_table, p_val_col, cluster_id_col
 
   # get auprc
   auprc <- pracma::trapz(auc_df$TPR, auc_df$Precision)
+
+  # get average precision - precision at each threshold weighted by the increase in recall
+  ap <- sum(diff(c(0, auc_df$TPR)) * auc_df$Precision, na.rm = T)
   
   auc_df %>%
     ggplot(aes(x = FPR, y = TPR)) +
@@ -587,7 +590,7 @@ evaluate_results <- function(results_table, seq_table, p_val_col, cluster_id_col
     geom_point() +
     geom_line() +
     labs(title = paste0('Alpha Threshold ', round(min(auc_thresholds)), ' to ', round(max(auc_thresholds), 3)),
-         subtitle = paste0(name, ' AUPRC: ', round(auprc, 3)),
+         subtitle = paste0(name, ' AUPRC: ', round(auprc, 3), '; AP: ', round(ap, 3)),
          x = 'Recall') + 
     theme_minimal() +
     scale_y_continuous(limits = c(0, 1))
@@ -598,7 +601,8 @@ evaluate_results <- function(results_table, seq_table, p_val_col, cluster_id_col
          height = 6)
 
   return(list('AUROC' = auroc,
-              'AUPRC' = auprc))
+              'AUPRC' = auprc,
+              'average_precision' = ap))
 
 }
 
@@ -1145,6 +1149,9 @@ if (AUC_VAR != FALSE){
   stat_table[1, 'AUPRC'] <- c(fisher_auc$AUPRC)
   stat_table[2, 'AUPRC'] <- c(wilcox_auc$AUPRC)
 
+  stat_table[1, 'average_precision'] <- c(fisher_auc$average_precision)
+  stat_table[2, 'average_precision'] <- c(wilcox_auc$average_precision)
+
   # get FDR at 0.05 cutoff for FDR
   stat_table[1, 'FDR'] <- calc_FDR(summ, 'fdr_fisher', AUC_VAR, 0.05)
   stat_table[2, 'FDR'] <- calc_FDR(summ, 'fdr_wilcox', AUC_VAR, 0.05)
@@ -1225,7 +1232,7 @@ if (AUC_VAR != FALSE){
   
   stat_table <- stat_table[c('tool', 'total_seqs', 'total_subj', 'tot_hits', 'pct_hits',
                               'num_hit_clusters', 'avg_pct_hits',
-                              'AUROC', 'AUPRC', 'FDR', 
+                              'AUROC', 'AUPRC', 'average_precision', 'FDR', 
                               'Jaccard_0.005', 'Jaccard_0.05',
                               'Jaccard_0.1', 'Jaccard_max', 'Jaccard_max_p',
                               'time (min)', 'subjects', 'depths')]
