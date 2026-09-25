@@ -45,7 +45,21 @@ workflow CONVBENCH {
     def ch_versions = channel.empty()
     def ch_multiqc_files = channel.empty()
 
-    ch_samplesheet.dump(tag: "samplesheet")
+    ch_samplesheet.dump(tag: "samplesheet") // Debug
+
+    // get CDR3 similarity process-specific similarity parameters
+    def linkage = params.linkage.toString().split(',').collect { it.trim() }
+    ch_linkage = channel.from(linkage)
+                        .dump(tag: 'linkage') // Debug
+
+    def threshold = params.threshold.toString().split(',').collect { it.trim().toFloat() }
+    ch_threshold = channel.from(threshold)
+                          .map { it -> it as Float } // convert to Float
+                          .dump(tag: 'threshold') // Debug
+    
+    // combine clustering parameters
+    ch_clustering_params = ch_linkage.combine(ch_threshold)
+                                     .dump(tag: 'cdr3_similarity_clustering_params')
 
     //
     // MODULE: Run split_by_ASC
@@ -96,9 +110,23 @@ workflow CONVBENCH {
     //
 
     if (params.conv_tools && params.conv_tools.split(',').contains('cdr3_similarity')){
+
         if(params.asc_mode){
 
-            cdr3_sim_asc_result = CDR3_SIMILARITY_ASC(ch_file_pairs)
+            ch_clustering_params_inputs_asc = ch_file_pairs
+                .combine(ch_clustering_params)
+                .map { it ->
+                def fmeta = [:]
+                fmeta.id = it[0] + '_' + it[5].toString() + '_t' + it[6].toString()
+                fmeta.asc_id = it[1]
+                fmeta.linkage = it[5]
+                fmeta.threshold = it[6]
+                fmeta.library_sizes = it[4]
+                [fmeta, it[2], it[3]] // channel: [ [meta, airr, embedding] ]
+                }
+                .dump(tag: 'cdr3_input_final_asc')
+
+            cdr3_sim_asc_result = CDR3_SIMILARITY_ASC(ch_clustering_params_inputs_asc)
 
             def tool_id = 'cdr3_similarity'
 
@@ -111,8 +139,20 @@ workflow CONVBENCH {
             GET_CDR3_SIMILARITY_ASC_AUROC(cdr3_sim_asc_input)
         
         } else{
+
+            ch_clustering_params_inputs = ch_samplesheet
+                .combine(ch_clustering_params)
+                .map { it ->
+                def fmeta = [:]
+                fmeta.id = it[0].id + '_' + it[3].toString() + '_t' + it[4].toString()
+                fmeta.linkage = it[3]
+                fmeta.threshold = it[4]
+                [fmeta, it[1], it[2]] // channel: [ [meta, airr, embedding] ]
+                }
+                .dump(tag: 'cdr3_input_final')
+
             CDR3_SIMILARITY(
-                ch_samplesheet
+                ch_clustering_params_inputs
             )
         }
     }
@@ -123,7 +163,20 @@ workflow CONVBENCH {
     if (params.conv_tools && params.conv_tools.split(',').contains('cdr3_similarity_firstv')){
         if(params.asc_mode){
 
-            cdr3_sim_asc_result = CDR3_SIMILARITY_ASC_FIRSTV(ch_file_pairs)
+            ch_clustering_firstv_params_inputs_asc = ch_file_pairs
+                .combine(ch_clustering_params)
+                .map { it ->
+                def fmeta = [:]
+                fmeta.id = it[0] + '_' + it[5].toString() + '_t' + it[6].toString()
+                fmeta.asc_id = it[1]
+                fmeta.linkage = it[5]
+                fmeta.threshold = it[6]
+                fmeta.library_sizes = it[4]
+                [fmeta, it[2], it[3]] // channel: [ [meta, airr, embedding] ]
+                }
+                .dump(tag: 'cdr3_firstv_input_final_asc')
+
+            cdr3_sim_asc_result = CDR3_SIMILARITY_ASC_FIRSTV(ch_clustering_firstv_params_inputs_asc)
 
             def tool_id = 'cdr3_similarity_firstv'
 
@@ -136,8 +189,20 @@ workflow CONVBENCH {
             GET_CDR3_SIMILARITY_ASC_FIRSTV_AUROC(cdr3_sim_asc_input)
         
         } else{
+
+            ch_clustering_firstv_params_inputs = ch_samplesheet
+                .combine(ch_clustering_params)
+                .map { it ->
+                def fmeta = [:]
+                fmeta.id = it[0].id + '_' + it[3].toString() + '_t' + it[4].toString()
+                fmeta.linkage = it[3]
+                fmeta.threshold = it[4]
+                [fmeta, it[1], it[2]] // channel: [ [meta, airr, embedding] ]
+                }
+                .dump(tag: 'cdr3_firstv_input_final')
+
             CDR3_SIMILARITY_FIRSTV(
-                ch_samplesheet
+                ch_clustering_firstv_params_inputs
             )
         }
     }
