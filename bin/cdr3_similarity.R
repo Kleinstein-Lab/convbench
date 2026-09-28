@@ -734,6 +734,13 @@ start_time <- Sys.time()
 ### CLUSTER ###
 ###############
 
+# required for method="aa" to produce valid AA translations
+md <- md %>%
+  dplyr::filter(
+    nchar(junction) > 0,
+    nchar(junction) %% 3 == 0
+  )
+
 # need to make clone IDs
 # for initial test, use all the sequences
 if (SINGLE_CELL){
