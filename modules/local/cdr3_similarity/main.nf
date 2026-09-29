@@ -28,7 +28,7 @@ process CDR3_SIMILARITY{
     -dg ${params.disease_gp} \
     -t ${meta.threshold} \
     -l ${meta.linkage} \
-    -c ${params.cdr3_sim_nproc} \
+    -c ${task.cpus} \
     -a ${params.auc_variable} \
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \
@@ -68,7 +68,7 @@ process CDR3_SIMILARITY_ASC{
     -dg ${params.disease_gp} \
     -t ${meta.threshold} \
     -l ${meta.linkage} \
-    -c ${params.cdr3_sim_nproc} \
+    -c ${task.cpus} \
     -a ${params.auc_variable} \
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \
