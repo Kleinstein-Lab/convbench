@@ -741,6 +741,59 @@ md <- md %>%
     nchar(junction) %% 3 == 0
   )
 
+#######
+# Debugging
+#######
+prepared <- scoper:::prepare_db(
+  db = md,
+  junction = "junction",
+  v_call = "v_call",
+  j_call = "j_call",
+  only_heavy = TRUE,
+  locus = "locus",
+  first = FIRST,
+  cell_id = NULL,
+  fields = NULL,
+  cdr3 = FALSE,
+  mod3 = FALSE,
+  max_n = 0,
+  method = "aa"
+)
+
+db_prep <- prepared$db
+
+# Step 2: walk groups one at a time and catch the failing one
+vjl_groups <- unique(db_prep$vjl_group)
+
+for (gp in sort(vjl_groups)) {
+  db_gp <- filter(db_prep, vjl_group == gp)
+  result <- tryCatch({
+    scoper:::hierarchicalClones_helper(
+      db_gp,
+      method     = "aa",
+      linkage    = "single",
+      normalize  = "len",
+      IUPAC      = FALSE,
+      junction   = "junction",
+      cdr3       = FALSE,
+      threshold  = 0.15
+    )
+    NULL  # no error
+  }, error = function(e) e$message)
+
+  if (!is.null(result)) {
+    cat("=== FAILING GROUP:", gp, "===\n")
+    cat("Error:", result, "\n")
+    cat("n rows:", nrow(db_gp), "\n")
+    cat("Junction lengths:", table(nchar(db_gp$junction)), "\n")
+    cat("Sample junctions:\n")
+    print(db_gp$junctio)
+    cat("Translated:\n")
+    print(alakazam::translateDNA(db_gp$junction))
+    break
+  }
+}
+
 # need to make clone IDs
 # for initial test, use all the sequences
 if (SINGLE_CELL){
