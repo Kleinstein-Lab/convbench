@@ -2,7 +2,7 @@ process CDR3_SIMILARITY{
     tag "${meta.id}"
     label 'process_medium'
 
-    container "docker.io/cfsullivan16/cdr3similarity:1.1.0dev"
+    container "docker.io/ggabernet/cdr3similarity:1.0.0dev"
 
     input:
     tuple val(meta), path(airr), path(embedding)
@@ -28,7 +28,7 @@ process CDR3_SIMILARITY{
     -dg ${params.disease_gp} \
     -t ${meta.threshold} \
     -l ${meta.linkage} \
-    -c ${params.cdr3_sim_nproc} \
+    -c ${task.cpus} \
     -a ${params.auc_variable} \
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \
@@ -42,7 +42,7 @@ process CDR3_SIMILARITY_ASC{
     tag "${meta.id}_${meta.asc_id}"
     label 'process_medium'
 
-    container "docker.io/cfsullivan16/cdr3similarity:1.1.0dev"
+    container "docker.io/ggabernet/cdr3similarity:1.0.0dev"
 
     input:
     tuple val(meta), path(airr), path(embedding)
@@ -68,7 +68,7 @@ process CDR3_SIMILARITY_ASC{
     -dg ${params.disease_gp} \
     -t ${meta.threshold} \
     -l ${meta.linkage} \
-    -c ${params.cdr3_sim_nproc} \
+    -c ${task.cpus} \
     -a ${params.auc_variable} \
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \
