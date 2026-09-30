@@ -20,4 +20,4 @@ ENV PATH=/opt/conda/envs/cdr3_similarity/bin:$PATH
 
 RUN Rscript -e "pak::pkg_install('immcantation/alakazam@master')"
 RUN Rscript -e "pak::pak('shazam@1.3.2')"
-RUN Rscript -e "pak::pak('immcantation/scoper@master')"
+RUN Rscript -e "pak::pkg_install('immcantation/scoper@fix_matrix')"
