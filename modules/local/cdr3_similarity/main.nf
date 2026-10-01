@@ -6,6 +6,7 @@ process CDR3_SIMILARITY{
 
     input:
     tuple val(meta), path(airr), path(embedding)
+    path asc_guide
 
     output:
     path "tables/run_stats.tsv", emit: run_stats
@@ -20,6 +21,7 @@ process CDR3_SIMILARITY{
 
     script:
     def args = task.ext.args ? task.ext.args : ""
+    def asc_guide_arg = params.cluster_by_asc ? "-ag ${asc_guide}" : ""
     """
     cdr3_similarity.R \
     -md ${airr} \
@@ -33,6 +35,8 @@ process CDR3_SIMILARITY{
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \
     -r ${params.remove_dups} \
+    -ca ${params.cluster_by_asc} \
+    ${asc_guide_arg} \
     ${args}
 
     """
@@ -46,6 +50,7 @@ process CDR3_SIMILARITY_ASC{
 
     input:
     tuple val(meta), path(airr), path(embedding)
+    path asc_guide
 
     output:
     tuple val(meta.id), path("tables/*_seq_summary.tsv"), emit: auc_input
@@ -59,6 +64,7 @@ process CDR3_SIMILARITY_ASC{
 
     script:
     def args = task.ext.args ? task.ext.args : ""
+    def asc_guide_arg = params.cluster_by_asc ? "-ag ${asc_guide}" : ""
     """
     cdr3_similarity.R \
     -md ${airr} \
@@ -73,6 +79,8 @@ process CDR3_SIMILARITY_ASC{
     -v ${params.vdj_info} \
     -sc ${params.single_cell} \
     -r ${params.remove_dups} \
+    -ca ${params.cluster_by_asc} \
+    ${asc_guide_arg} \
     ${args}
 
     """

@@ -585,6 +585,12 @@ parser$add_argument('-r', '--remove_dups', type = 'logical', default = FALSE,
 parser$add_argument('-f', '--first', type = 'logical', default = FALSE,
                     help = 'Specify whether to consider only the first occurrence of each clone.')
 
+parser$add_argument('-ca', '--cluster_by_asc', type = 'logical', default = FALSE,
+                    help = 'Cluster on ASC alleles instead of IMGT V alleles if TRUE. Requires an ASC guide. Bulk data only.')
+
+parser$add_argument('-ag', '--asc_guide', type = 'character', default = NULL,
+                    help = 'File path to a tab-separated file containing IMGT to ASC allele translations.')
+
 
 # Parse the arguments
 args <- parser$parse_args()
@@ -608,6 +614,8 @@ SINGLE_CELL <- args$single_cell
 AUC_VAR <- args$auc_var
 REMOVE_DUPS <- args$remove_dups
 FIRST <- args$first
+CLUSTER_BY_ASC <- args$cluster_by_asc
+ASC_GUIDE_LOC <- args$asc_guide
 
 if (AUC_VAR != FALSE){
   message(paste0('AUC variable ', AUC_VAR, ' will be used.'))
@@ -617,6 +625,19 @@ if (AUC_VAR != FALSE){
 
 if (REMOVE_DUPS){
   message('Duplicate embeddings within a subject will be collapsed.')
+}
+
+if (CLUSTER_BY_ASC & SINGLE_CELL){
+  message('WARNING: Clustering by ASC is only supported for bulk data. The cluster_by_asc parameter will be ignored.')
+  CLUSTER_BY_ASC <- FALSE
+}
+
+if (CLUSTER_BY_ASC & is.null(ASC_GUIDE_LOC)){
+  stop('An ASC guide must be provided when clustering by ASC.')
+}
+
+if (CLUSTER_BY_ASC){
+  message('Clustering will be performed on ASC alleles instead of IMGT V alleles.')
 }
 
 # create locations for figures and results to be saved within output dir
@@ -693,6 +714,67 @@ if (!'j_allele' %in% colnames(md)){
   md$j_allele <- alakazam::getAllele(md$j_call, strip_d = F, omit_nl = F)
 }
 
+########################
+### ASSIGN ASC CALLS ###
+########################
+
+if (CLUSTER_BY_ASC){
+
+  message(paste0('Loading ASC guide: ', ASC_GUIDE_LOC))
+
+  tryCatch(
+
+    {
+      asc_guide <- readr::read_tsv(ASC_GUIDE_LOC, show_col_types = FALSE)
+    }, error = function(e){
+
+      stop(e)
+
+    }
+
+  )
+
+  # expand alleles with multiple semicolon-separated names so each maps to its asc_allele
+  guide_alleles <- strsplit(asc_guide$allele, ';')
+  asc_allele_guide <- data.frame(allele = trimws(unlist(guide_alleles)),
+                                 asc_allele = rep(asc_guide$asc_allele, lengths(guide_alleles))) %>%
+    dplyr::distinct()
+
+  if (any(duplicated(asc_allele_guide$allele))){
+    stop(paste0('The following alleles map to more than one ASC allele in the ASC guide: ',
+                paste(unique(asc_allele_guide$allele[duplicated(asc_allele_guide$allele)]), collapse = ', ')))
+  }
+
+  asc_lookup <- setNames(asc_allele_guide$asc_allele, asc_allele_guide$allele)
+
+  # each v_call can contain multiple comma-separated alleles
+  v_call_split <- lapply(strsplit(md$v_call, ','), trimws)
+
+  # stop if any alleles in the data are missing from the guide
+  not_in_guide <- setdiff(na.omit(unique(unlist(v_call_split))), names(asc_lookup))
+
+  if (length(not_in_guide) > 0){
+    stop(paste0('The following V alleles are not present in the ASC guide: ',
+                paste(not_in_guide, collapse = ', '),
+                '. Please provide an ASC guide that contains all alleles in your data (i.e. one built from the same reference used for V(D)J annotation).'))
+  }
+
+  # translate to ASC alleles, collapsing duplicates and sorting so first V selection is consistent
+  md$asc_v_call <- vapply(v_call_split, function(x){
+    if (all(is.na(x))){
+      return(NA_character_)
+    }
+    paste(sort(unique(asc_lookup[x]), method = 'radix'), collapse = ',')
+  }, character(1), USE.NAMES = FALSE)
+
+  md$asc_v_gene <- alakazam::getGene(md$asc_v_call, strip_d = F, omit_nl = F)
+
+  message('All V alleles translated to ASC alleles.')
+}
+
+V_CALL_COL <- ifelse(CLUSTER_BY_ASC, 'asc_v_call', 'v_call')
+V_GENE_COL <- ifelse(CLUSTER_BY_ASC, 'asc_v_gene', 'v_gene')
+
 if (AUC_VAR != FALSE){
   # make sure simulated is recognized
   md[[AUC_VAR]] <- as.logical(md[[AUC_VAR]])
@@ -712,7 +794,7 @@ if (REMOVE_DUPS){
   old_seq_num <- nrow(md)
   
   md <- md %>%
-    distinct(v_gene, j_gene, cdr3_aa, subject_id, .keep_all = TRUE)
+    distinct(across(all_of(c(V_GENE_COL, 'j_gene', 'cdr3_aa', 'subject_id'))), .keep_all = TRUE)
   
   new_seq_num <- nrow(md)
   
@@ -766,7 +848,7 @@ if (SINGLE_CELL){
                                                   linkage=LINKAGE,
                                                   normalize="len",
                                                   junction="junction",
-                                                  v_call="v_call", 
+                                                  v_call=V_CALL_COL,
                                                   j_call="j_call",
                                                   clone="convergent_clone_id",
                                                   fields=NULL,
@@ -864,6 +946,10 @@ ggsave(file.path(OUTPUT_DIR, 'figures', 'fisher_overview_disease.png'),
 
 # AUC summary
 cols_of_interest <- c('id_col', 'v_gene', 'j_gene', 'subject_id', 'convergent_clone_id')
+
+if (CLUSTER_BY_ASC){
+  cols_of_interest <- c(cols_of_interest, 'asc_v_call', 'asc_v_gene')
+}
 
 if (AUC_VAR != FALSE){
   cols_of_interest <- c(cols_of_interest, AUC_VAR)

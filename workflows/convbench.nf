@@ -69,13 +69,17 @@ workflow CONVBENCH {
         error "When --asc_mode is enabled, you must provide --asc_guide."
     }
 
+    if (params.cluster_by_asc && !params.asc_guide){
+        error "When --cluster_by_asc is enabled, you must provide --asc_guide."
+    }
+
+    // make channel for guide (empty placeholder if no guide is provided)
+    ch_asc_guide = params.asc_guide ? channel.value(file(params.asc_guide)) : channel.value([])
+
     if (params.asc_mode){
 
-        // make channel for guide
-        asc_guide = Channel.value(file(params.asc_guide))
-
         // make ASC level channel    
-        asc_splitting = SPLIT_BY_ASC(ch_samplesheet, asc_guide)
+        asc_splitting = SPLIT_BY_ASC(ch_samplesheet, ch_asc_guide)
 
         ch_file_pairs = asc_splitting.flatMap{ meta, md_files, emb_files, library_sizes  ->
             
@@ -126,7 +130,7 @@ workflow CONVBENCH {
                 }
                 .dump(tag: 'cdr3_input_final_asc')
 
-            cdr3_sim_asc_result = CDR3_SIMILARITY_ASC(ch_clustering_params_inputs_asc)
+            cdr3_sim_asc_result = CDR3_SIMILARITY_ASC(ch_clustering_params_inputs_asc, ch_asc_guide)
 
             def tool_id = 'cdr3_similarity'
 
@@ -152,7 +156,8 @@ workflow CONVBENCH {
                 .dump(tag: 'cdr3_input_final')
 
             CDR3_SIMILARITY(
-                ch_clustering_params_inputs
+                ch_clustering_params_inputs,
+                ch_asc_guide
             )
         }
     }
@@ -176,7 +181,7 @@ workflow CONVBENCH {
                 }
                 .dump(tag: 'cdr3_firstv_input_final_asc')
 
-            cdr3_sim_asc_result = CDR3_SIMILARITY_ASC_FIRSTV(ch_clustering_firstv_params_inputs_asc)
+            cdr3_sim_asc_result = CDR3_SIMILARITY_ASC_FIRSTV(ch_clustering_firstv_params_inputs_asc, ch_asc_guide)
 
             def tool_id = 'cdr3_similarity_firstv'
 
@@ -202,7 +207,8 @@ workflow CONVBENCH {
                 .dump(tag: 'cdr3_firstv_input_final')
 
             CDR3_SIMILARITY_FIRSTV(
-                ch_clustering_firstv_params_inputs
+                ch_clustering_firstv_params_inputs,
+                ch_asc_guide
             )
         }
     }
