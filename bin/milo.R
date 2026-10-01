@@ -885,7 +885,7 @@ fisher_min_p <- assign_min_p_nhood(milo@nhoods, da_results, 'fisher_SpatialFDR',
                                                  odds_ratio = 'fisher_odds_ratio'),
                                    prefix = 'fisher_')
 
-# the Fisher test is very conservative, so also assign on raw p-values for AUCs
+# also assign on raw p-values for reference, since the Fisher test is very conservative
 fisher_raw_min_p <- assign_min_p_nhood(milo@nhoods, da_results, 'fisher_PValue', 
                                        keep_cols = c(SpatialFDR = 'fisher_SpatialFDR', BH = 'fisher_BH', 
                                                      odds_ratio = 'fisher_odds_ratio'),
@@ -949,7 +949,7 @@ if (AUC_VAR != FALSE){
 
   message('Making AUC curves...')
   glm_eval <- evaluate_results(min_p_nhoods_df, 'min_nhood_FDR', AUC_VAR, 'GLM')
-  fisher_eval <- evaluate_results(min_p_nhoods_df, 'fisher_raw_min_nhood_PValue', AUC_VAR, 'Fisher')
+  fisher_eval <- evaluate_results(min_p_nhoods_df, 'fisher_min_nhood_FDR', AUC_VAR, 'Fisher')
   wilcox_eval <- evaluate_results(min_p_nhoods_df, 'wilcox_min_nhood_FDR', AUC_VAR, 'One-Sided_Wilcoxon')
 
   # FDR

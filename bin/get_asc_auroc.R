@@ -517,7 +517,7 @@ if (TOOL == 'Milo'){
       asc_id <- stringr::str_split_i(basename(f), '_seq_results', 1)
 
       milo_test_cols <- c('fisher_PValue', 'wilcox_PValue', 
-                          'fisher_raw_min_nhood_id', 'fisher_raw_min_nhood_PValue',
+                          'fisher_min_nhood_id', 'fisher_min_nhood_FDR',
                           'wilcox_min_nhood_id', 'wilcox_min_nhood_FDR')
       missing_cols <- setdiff(milo_test_cols, colnames(df))
       
@@ -529,7 +529,7 @@ if (TOOL == 'Milo'){
       # keep sequences with no neighborhood as NA rather than '<ASC>_NA'
       df <- df %>%
         dplyr::mutate(ASC = asc_id,
-                      dplyr::across(c(nhood_id, fisher_raw_min_nhood_id, wilcox_min_nhood_id),
+                      dplyr::across(c(nhood_id, fisher_min_nhood_id, fisher_raw_min_nhood_id, wilcox_min_nhood_id),
                                     ~ dplyr::if_else(is.na(.x), NA_character_, paste0(ASC, '_', .x))))
 
       return(df)
@@ -556,8 +556,8 @@ if (TOOL == 'Milo'){
     milo <- milo %>%
       dplyr::left_join(cluster_results[c('nhood_id', 'agg_fdr')], 
                        by = 'nhood_id', relationship = 'many-to-one') %>%
-      dplyr::left_join(cluster_results %>% dplyr::select(fisher_raw_min_nhood_id = nhood_id, agg_fdr_fisher), 
-                       by = 'fisher_raw_min_nhood_id', relationship = 'many-to-one') %>%
+      dplyr::left_join(cluster_results %>% dplyr::select(fisher_min_nhood_id = nhood_id, agg_fdr_fisher), 
+                       by = 'fisher_min_nhood_id', relationship = 'many-to-one') %>%
       dplyr::left_join(cluster_results %>% dplyr::select(wilcox_min_nhood_id = nhood_id, agg_fdr_wilcox), 
                        by = 'wilcox_min_nhood_id', relationship = 'many-to-one')
     
@@ -572,8 +572,8 @@ if (TOOL == 'Milo'){
         # get purity info - exclude sequences not in any neighborhood
         milo_purity_stat_list <- save_purity_stats(milo_seqs %>% dplyr::filter(!is.na(nhood_id)), 
                                                    'nhood_id', AUC_VAR, 'min_nhood_FDR')
-        milo_purity_stat_list_fisher <- save_purity_stats(milo_seqs %>% dplyr::filter(!is.na(fisher_raw_min_nhood_id)), 
-                                                          'fisher_raw_min_nhood_id', AUC_VAR, 'fisher_raw_min_nhood_PValue')
+        milo_purity_stat_list_fisher <- save_purity_stats(milo_seqs %>% dplyr::filter(!is.na(fisher_min_nhood_id)), 
+                                                          'fisher_min_nhood_id', AUC_VAR, 'fisher_min_nhood_FDR')
         milo_purity_stat_list_wilcox <- save_purity_stats(milo_seqs %>% dplyr::filter(!is.na(wilcox_min_nhood_id)), 
                                                           'wilcox_min_nhood_id', AUC_VAR, 'wilcox_min_nhood_FDR')
         
@@ -603,9 +603,8 @@ if (TOOL == 'Milo'){
 
         ###
 
-        # Fisher is very conservative, so use nominal p-values for the curve
-        p_milo_fisher <- evaluation_curve(milo_seqs, 'fisher_raw_min_nhood_PValue', 
-                                          AUC_VAR, tool = 'Milo + Fisher', simplify_p = T)
+        p_milo_fisher <- evaluation_curve(milo_seqs, 'fisher_min_nhood_FDR', 
+                                          AUC_VAR, tool = 'Milo + Fisher', simplify_p = length(unique(milo_seqs$fisher_min_nhood_FDR)) > 1000)
 
         ggsave(file.path('figures', 'Milo_ASC_FISHER_AUROC.png'),
                 p_milo_fisher$plot_auroc,
