@@ -2,7 +2,7 @@ process DASEQ{
     tag "${meta.id}"
     label 'process_high'
 
-    container "docker.io/cfsullivan16/daseq:1.0.0dev"
+    container "docker.io/cfsullivan16/daseq:1.0.0"
 
     input:
     tuple val(meta), path(airr), path(embedding)

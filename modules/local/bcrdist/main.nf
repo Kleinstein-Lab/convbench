@@ -2,7 +2,7 @@ process BCRDIST{
     tag "${meta.id}"
     label 'process_high'
 
-    container "docker.io/cfsullivan16/bcrdist:1.0.0dev"
+    container "docker.io/cfsullivan16/bcrdist:1.0.0"
 
     input:
     tuple val(meta), path(airr), path(embedding)
