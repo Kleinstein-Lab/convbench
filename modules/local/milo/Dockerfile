@@ -18,4 +18,4 @@ RUN conda env create -f /environment.yml && conda clean -a
 
 ENV PATH=/opt/conda/envs/milo/bin:$PATH
 
-RUN Rscript -e "pak::pak('alakazam@1.4.3')"
+RUN Rscript -e "pak::pak('alakazam@1.5.0')"
