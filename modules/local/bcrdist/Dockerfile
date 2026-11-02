@@ -2,7 +2,7 @@ FROM continuumio/miniconda3:26.3.2
 LABEL authors="caroline.sullivan@yale.edu"
 LABEL description="Docker image containing all requirements for the BCRdist module"
 
-# Build with command: docker build . -t immcantation/bcrdist:<ver>
+# Build with command: docker build . -t cfsullivan16/bcrdist:<ver>
 
 # Update system packages and install dependencies
 RUN apt-get update \
@@ -18,4 +18,4 @@ RUN conda env create -f /environment.yml && conda clean -a
 
 ENV PATH=/opt/conda/envs/bcrdist/bin:$PATH
 
-RUN Rscript -e "pak::pak('alakazam@1.4.3')"
+RUN Rscript -e "pak::pak('alakazam@1.5.0')"

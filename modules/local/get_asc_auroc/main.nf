@@ -2,7 +2,7 @@ process GET_ASC_AUROC{
     tag "${meta_id}_${tool_id}"
     label 'process_medium'
 
-    container "docker.io/cfsullivan16/asc_auroc:1.0.0dev"
+    container "docker.io/cfsullivan16/asc_auroc:1.0.0"
 
     input:
     tuple val(tool_id), val(meta_id), path(seq_tables)

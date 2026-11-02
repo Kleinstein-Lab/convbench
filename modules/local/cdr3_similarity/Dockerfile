@@ -2,7 +2,7 @@ FROM continuumio/miniconda3:26.3.2
 LABEL authors="caroline.sullivan@yale.edu"
 LABEL description="Docker image containing all requirements for the cdr3_similarity module"
 
-# Build with command: docker build . -t immcantation/cdr3similiarity:<ver>
+# Build with command: docker build . -t cfsullivan16/cdr3similiarity:<ver>
 
 # Update system packages and install dependencies
 RUN apt-get update \
@@ -18,6 +18,6 @@ RUN conda env create -f /environment.yml && conda clean -a
 
 ENV PATH=/opt/conda/envs/cdr3_similarity/bin:$PATH
 
-RUN Rscript -e "pak::pkg_install('immcantation/alakazam@master')"
-RUN Rscript -e "pak::pak('shazam@1.3.2')"
-RUN Rscript -e "pak::pak('immcantation/scoper@master')"
+RUN Rscript -e "pak::pak('alakazam@1.5.0')"
+RUN Rscript -e "pak::pak('shazam@1.4.0')"
+RUN Rscript -e "pak::pak('scoper@1.6.0')"
