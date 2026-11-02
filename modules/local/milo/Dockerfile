@@ -2,7 +2,7 @@ FROM continuumio/miniconda3:26.3.2
 LABEL authors="caroline.sullivan@yale.edu"
 LABEL description="Docker image containing all requirements for the Milo module"
 
-# Build with command: docker build . -t immcantation/milo:<ver>
+# Build with command: docker build . -t cfsullivan16/milo:<ver>
 
 # Update system packages and install dependencies
 RUN apt-get update \
