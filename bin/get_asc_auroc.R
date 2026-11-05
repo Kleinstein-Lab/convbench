@@ -529,7 +529,7 @@ if (TOOL == 'Milo'){
       # keep sequences with no neighborhood as NA rather than '<ASC>_NA'
       df <- df %>%
         dplyr::mutate(ASC = asc_id,
-                      dplyr::across(c(nhood_id, fisher_min_nhood_id, fisher_raw_min_nhood_id, wilcox_min_nhood_id),
+                      dplyr::across(c(nhood_id, fisher_min_nhood_id, fisher_raw_min_nhood_id, wilcox_min_nhood_id, wilcox_raw_min_nhood_id),
                                     ~ dplyr::if_else(is.na(.x), NA_character_, paste0(ASC, '_', .x))))
 
       return(df)
