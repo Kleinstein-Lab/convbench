@@ -2,7 +2,7 @@ process BCRDIST{
     tag "${meta.id}"
     label 'process_high'
 
-    container "docker.io/cfsullivan16/bcrdist:1.0.0dev"
+    container "docker.io/cfsullivan16/bcrdist:1.0.0"
 
     input:
     tuple val(meta), path(airr), path(embedding)
@@ -47,7 +47,7 @@ process BCRDIST_ASC{
     tag "${meta_id}_${asc_id}"
     label 'process_high'
 
-    container "docker.io/cfsullivan16/bcrdist:1.0.0dev"
+    container "docker.io/cfsullivan16/bcrdist:1.0.0"
 
     input:
     tuple val(meta_id), val(asc_id), path(airr), path(embedding), path(library_sizes)
