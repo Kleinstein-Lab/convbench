@@ -897,15 +897,14 @@ wilcox_min_p <- assign_min_p_nhood(milo@nhoods, da_results, 'wilcox_SpatialFDR',
 
 # also assign on raw p-values for reference, only to compare with fisher
 wilcox_raw_min_p <- assign_min_p_nhood(milo@nhoods, da_results, 'wilcox_PValue', 
-                                       keep_cols = c(SpatialFDR = 'wilcox_SpatialFDR', BH = 'wilcox_BH', 
-                                                     odds_ratio = 'wilcox_odds_ratio'),
+                                       keep_cols = c(SpatialFDR = 'wilcox_SpatialFDR', BH = 'wilcox_BH'),
                                        prefix = 'wilcox_raw_', score_name = 'PValue')
 
 min_p_nhoods_df <- glm_min_p %>%
   dplyr::left_join(fisher_min_p, by = 'id_col') %>%
   dplyr::left_join(fisher_raw_min_p, by = 'id_col') %>%
   dplyr::left_join(wilcox_min_p, by = 'id_col') %>%
-  dplyr::left_join(wilcox_raw_min_p, by = 'id_col') %>%
+  dplyr::left_join(wilcox_raw_min_p, by = 'id_col')
 
 if (AUC_VAR != FALSE){
   min_p_nhoods_df <- min_p_nhoods_df %>%
