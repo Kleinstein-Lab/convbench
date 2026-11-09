@@ -232,16 +232,19 @@ score_sequences <- function(memberships, test_results, score_col){
   return(seq_info %>% dplyr::left_join(assigned, by = 'sequence_id'))
 }
 
-evaluate_curve <- function(scores, truth){
+evaluate_curve <- function(scores, truth, log_digits = 8){
   # get the ROC and precision-recall curves for sequence-level scores, where a sequence is
   # called DA at a threshold if its score is below the threshold
   # scores = sequence-level scores (i.e. p-values); sequences with no score get a score of 1
   # truth = sequence-level ground truth (i.e. simulated)
+  # log_digits = decimal places kept for log10(scores) when finding ties
 
   scores[is.na(scores)] <- 1
 
-  # avoid floating point errors
-  scores <- round(scores, 6)
+  # avoid floating point errors by rounding on the log scale. This is a relative tolerance,
+  # so scores within floating point error of each other are tied while very small p-values
+  # keep their full resolution (p-values of 0 become -Inf, which still sort first)
+  scores <- round(log10(scores), log_digits)
   truth <- as.logical(truth)
 
   thresholds <- sort(unique(scores))
@@ -252,7 +255,7 @@ evaluate_curve <- function(scores, truth){
   neg <- tabulate(score_idx[truth %in% FALSE], nbins = length(thresholds))
 
   # sequences called DA at each threshold are those with scores strictly below it.
-  # Add to the largest to make sure the entire curve is captured
+  # Add to the largest (on the log scale) to make sure the entire curve is captured
   n_thresh <- length(thresholds)
   thresholds[n_thresh] <- thresholds[n_thresh] + 1e-3
 
@@ -272,7 +275,8 @@ evaluate_curve <- function(scores, truth){
                        'FP' = false_pos,
                        'TN' = true_neg,
                        'FN' = false_neg,
-                       'threshold' = thresholds)
+                       'threshold' = 10^thresholds,
+                       'log10_threshold' = thresholds)
 
   # estimate the first precision point - it should always be NA b/c no false or true positives below the first threshold
   if (is.na(auc_df[1,'Precision']) & nrow(auc_df) > 1){
