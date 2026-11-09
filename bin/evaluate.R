@@ -240,6 +240,7 @@ evaluate_curve <- function(scores, truth, log_digits = 8){
   # log_digits = decimal places kept for log10(scores) when finding ties
 
   scores[is.na(scores)] <- 1
+  score_range <- range(scores)
 
   # avoid floating point errors by rounding on the log scale. This is a relative tolerance,
   # so scores within floating point error of each other are tied while very small p-values
@@ -288,17 +289,21 @@ evaluate_curve <- function(scores, truth, log_digits = 8){
               'AUPRC' = pracma::trapz(auc_df$TPR, auc_df$Precision),
               # average precision - precision at each threshold weighted by the increase in recall
               'average_precision' = sum(diff(c(0, auc_df$TPR)) * auc_df$Precision, na.rm = T),
-              'baseline' = mean(truth, na.rm = T)))
+              'baseline' = mean(truth, na.rm = T),
+              'score_range' = score_range))
 }
 
 plot_curves <- function(curve, name){
+
+  # range of the observed scores (not the bumped final threshold)
+  title <- paste0('Scores ', signif(curve$score_range[1], 3), ' to ', signif(curve$score_range[2], 3))
 
   curve$table %>%
     ggplot(aes(x = FPR, y = TPR)) +
     geom_abline(slope = 1, intercept = 0, color = 'gray') +
     geom_point() +
     geom_line() +
-    labs(title = paste0('Threshold ', round(min(curve$table$threshold), 3), ' to ', round(max(curve$table$threshold), 3)),
+    labs(title = title,
          subtitle = paste0(name, ' AUROC: ', round(curve$AUROC, 3))) +
     theme_minimal()
 
@@ -310,7 +315,7 @@ plot_curves <- function(curve, name){
     geom_hline(yintercept = curve$baseline, color = 'red', linetype = 'dashed') +
     geom_point() +
     geom_line() +
-    labs(title = paste0('Threshold ', round(min(curve$table$threshold), 3), ' to ', round(max(curve$table$threshold), 3)),
+    labs(title = title,
          subtitle = paste0(name, ' AUPRC: ', round(curve$AUPRC, 3), '; AP: ', round(curve$average_precision, 3)),
          x = 'Recall') +
     theme_minimal() +
