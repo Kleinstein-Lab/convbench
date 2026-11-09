@@ -12,7 +12,6 @@ dependencies:
   - bioconda::bioconductor-summarizedexperiment
   - conda-forge::r-ggplot2
   - conda-forge::r-ggrepel
-  - conda-forge::r-patchwork
   - conda-forge::r-dplyr
   - conda-forge::r-tidyr
   - conda-forge::r-readr

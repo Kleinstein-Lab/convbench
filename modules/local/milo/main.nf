@@ -1,5 +1,5 @@
 process MILO{
-    tag "${meta.id}"
+    tag "${meta.id}_${meta.group_id}"
     label 'process_medium'
 
     container "docker.io/cfsullivan16/milo:1.0.0"
@@ -8,14 +8,12 @@ process MILO{
     tuple val(meta), path(airr), path(embedding)
 
     output:
-    path "tables/run_stats.tsv", emit: run_stats
-    path "tables/evaluation_curve_vals_*.tsv", emit: auc_vals, optional: true
-    path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
-    path "tables/*_seq_results.tsv", emit: seq_results
-    path "tables/min_p_nhoods.tsv", emit: min_p_nhoods
-    path "tables/da_results.tsv", emit: da_results
+    tuple val(meta),
+          path("tables/*_cluster_counts.tsv"),
+          path("tables/*_memberships.tsv"),
+          path("tables/*_tool_info.tsv"),
+          path("tables/*_milo.rds"), emit: eval_input
     path "tables/nhood_stats.tsv", emit: nhood_stats
-    path "tables/milo_nhoods.RDS", emit: milo_nhoods, optional: true
     path "figures/*.png", emit: figs
 
     script:
@@ -23,48 +21,9 @@ process MILO{
     milo.R \
     -d $embedding \
     -md $airr \
+    -g ${meta.group_id} \
     -o . \
     -da ${params.da_variable} \
-    -dg ${params.disease_gp} \
-    -k ${params.milo_k_val} \
-    -pr 0.1 \
-    -a ${params.auc_variable} \
-    -v ${params.vdj_info} \
-    -sc ${params.single_cell} \
-    -r ${params.remove_dups}
-
-    """
-}
-
-process MILO_ASC{
-    tag "${meta_id}_${asc_id}"
-    label 'process_medium'
-
-    container "docker.io/cfsullivan16/milo:1.0.0"
-
-    input:
-    tuple val(meta_id), val(asc_id), path(airr), path(embedding), path(library_sizes)
-
-    output:
-    tuple val(meta_id), path("tables/*_seq_results.tsv"), emit: auc_input
-    path "tables/min_p_nhoods.tsv", emit: min_p_nhoods
-    path "tables/run_stats.tsv", emit: run_stats
-    path "tables/evaluation_curve_vals_*.tsv", emit: auc_vals, optional: true
-    path "tables/jaccard_plot_vals.tsv", emit: jaccard_vals, optional: true
-    path "tables/da_results.tsv", emit: da_results
-    path "tables/nhood_stats.tsv", emit: nhood_stats
-    path "tables/milo_nhoods.RDS", emit: milo_nhoods, optional: true
-    path "figures/*.png", emit: figs
-
-    script:
-    """
-    milo.R \
-    -d $embedding \
-    -md $airr \
-    -li $library_sizes \
-    -o . \
-    -da ${params.da_variable} \
-    -dg ${params.disease_gp} \
     -k ${params.milo_k_val} \
     -pr 0.1 \
     -a ${params.auc_variable} \

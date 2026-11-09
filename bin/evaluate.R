@@ -494,7 +494,6 @@ if (TOOL_TYPE == 'milo'){
   suppressPackageStartupMessages({
     library(miloR)
     library(SingleCellExperiment)
-    library(patchwork)
   })
 
   if (length(MILO_LOCS) == 0){
@@ -788,9 +787,7 @@ if (TOOL_TYPE == 'cluster'){
       dplyr::filter(cluster_id %in% paste0(group, '_', unlist(nhoodIndex(milo)))) %>%
       dplyr::transmute(Nhood = dplyr::row_number(), logFC, PValue = p_value, SpatialFDR = spatial_fdr)
 
-    plotUMAP(milo) +
-      plotNhoodGraphDA(milo, group_res, alpha=0.05) +
-      plot_layout(guides="collect")
+    plotNhoodGraphDA(milo, group_res, alpha=0.05)
 
     ggsave(file.path(OUTPUT_DIR, 'figures', paste0(group, '_final_UMAP.png')),
            device = 'png',  width = 12, height = 6, units = 'in')
