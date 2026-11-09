@@ -13,13 +13,10 @@ suppressPackageStartupMessages({
 ### SET UP THE ENVIRONMENT ###
 ##############################
 
-parser <- ArgumentParser(description = "Data location and Mal-ID algorithm hyperparameters.")
+parser <- ArgumentParser(description = "Pre-process AIRR/embedding pairs: record library sizes and optionally split by ASC.")
 
-parser$add_argument('-a', '--asc_guide', type = 'character', default = 'asc_guide.tsv',
-                    help = 'File path to a tab-separated file containing IMGT to ASC allele translations.')
-
-# parser$add_argument('-l', '--label', type = 'character', default = 'COVID',
-#                     help = 'Metadata label for a given AIRR/embedding pair.')
+parser$add_argument('-a', '--asc_guide', type = 'character', default = NULL,
+                    help = 'File path to a tab-separated file containing IMGT to ASC allele translations. If not provided, data are not split by ASC.')
 
 parser$add_argument('-d', '--data_loc', type = 'character', default = 'data',
                     help = 'File path for the embedding or RNA-Seq data location.')
@@ -31,7 +28,7 @@ parser$add_argument('-da', '--da_variable', type = 'character', default = 'statu
                     help = 'Stratification variable that should be used to determine differential abundance. There should be two levels in this factor/categorical variable.')
 
 parser$add_argument('-e', '--use_embedding', type = 'logical', default = TRUE,
-                    help = 'Specify whether embedding AND metadata (TRUE) or ONLY metadata (FALSE) should be accounted for in ASC splitting.')
+                    help = 'Specify whether embedding AND metadata (TRUE) or ONLY metadata (FALSE) should be accounted for in library sizes and ASC splitting.')
 
 # Parse the arguments
 args <- parser$parse_args()
@@ -42,11 +39,91 @@ DATA_LOC <- args$data_loc
 USE_EMB <- as.logical(args$use_embedding)
 DA_VAR <- args$da_variable
 
-# META_LABEL <- args$label
+SPLIT_ASC <- !is.null(ASC_GUIDE_LOC)
 
-# if (!dir.exists(file.path('ASCs'))){
-#   dir.create(file.path('ASCs'))
-# }
+if (SPLIT_ASC){
+  message('ASC guide provided. Data will be split by ASC.')
+} else{
+  message('No ASC guide provided. Only library sizes will be recorded.')
+}
+
+#################
+### LOAD DATA ###
+#################
+
+# metadata
+message(paste0('Loading metadata: ', MD_LOC))
+
+tryCatch(
+
+  {
+    md <- airr::read_rearrangement(MD_LOC)
+  }, error = function(e){
+
+    stop(e)
+
+  }
+
+)
+
+if (!DA_VAR %in% colnames(md)){
+  stop(paste0('DA variable ', DA_VAR, ' not found in metadata.'))
+}
+
+# load embeddings or expr data
+if (USE_EMB){
+  message(paste0('Loading data: ', DATA_LOC))
+
+  tryCatch(
+
+    {
+      # only the sequence IDs are needed if the embedding is not being split
+      if (SPLIT_ASC){
+        data <- data.table::fread(DATA_LOC, sep = '\t', header = T)
+      } else{
+        data <- data.table::fread(DATA_LOC, sep = '\t', header = T, select = 'sequence_id')
+      }
+    }, error = function(e){
+
+      stop(e)
+
+    }
+  )
+
+  # get common sequences
+  common_seqs <- intersect(md$sequence_id, data$sequence_id)
+
+  message(paste0(length(common_seqs), ' of ', nrow(md), ' metadata sequences found in the data.'))
+
+  md <- md %>%
+    dplyr::filter(sequence_id %in% common_seqs) %>%
+    as.data.frame(check.names = F)
+
+  data <- data %>%
+    dplyr::filter(sequence_id %in% common_seqs) %>%
+    as.data.frame(check.names = F)
+}
+
+#########################
+### GET LIBRARY SIZES ###
+#########################
+
+# save library size and da var information for future steps
+lib_sizes <- md %>%
+  dplyr::group_by(subject_id, !!sym(DA_VAR)) %>%
+  dplyr::summarize(depth = n(), .groups = 'drop')
+
+if (any(duplicated(lib_sizes$subject_id))){
+  stop(paste0('Subjects found with more than one value of ', DA_VAR, ': ',
+              paste(unique(lib_sizes$subject_id[duplicated(lib_sizes$subject_id)]), collapse = ', ')))
+}
+
+write_tsv(lib_sizes, 'library_sizes.tsv')
+
+if (!SPLIT_ASC){
+  message('Finished.')
+  quit(save = 'no', status = 0)
+}
 
 ###################
 ### ASSIGN ASCs ###
@@ -54,15 +131,15 @@ DA_VAR <- args$da_variable
 
 # load the ASC guide
 tryCatch(
-  
+
   {
     asc_guide <- readr::read_tsv(ASC_GUIDE_LOC)
   }, error = function(e){
-    
+
     stop(e)
-    
+
   }
-  
+
 )
 
 # expand parts where multiple names for alleles exist
@@ -74,60 +151,6 @@ asc_guide <- asc_guide %>%
 asc_guide$asc_group <- getGene(asc_guide$asc_allele, strip_d = F, omit_nl = F)
 
 asc_allele_guide <- distinct(asc_guide[c('allele', 'asc_allele', 'asc_group')])
-
-# load the data
-# metadata
-message(paste0('Loading metadata: ', MD_LOC))
-
-tryCatch(
-  
-  {
-    md <- airr::read_rearrangement(MD_LOC)
-  }, error = function(e){
-    
-    stop(e)
-    
-  }
-  
-)
-
-# load embeddings or expr data
-message(paste0('Loading data: ', DATA_LOC))
-
-if (USE_EMB){
-
-    tryCatch(
-  
-  {
-    data <- data.table::fread(DATA_LOC, sep = '\t', header = T)
-  }, error = function(e){
-    
-    stop(e)
-    
-  }
-)
-
-}
-
-if (USE_EMB){
-  # get common sequences
-  common_seqs <- intersect(md$sequence_id, data$sequence_id)
-
-  md <- md %>%
-    dplyr::filter(sequence_id %in% common_seqs) %>%
-    as.data.frame(check.names = F)
-
-  data <- data %>%
-    dplyr::filter(sequence_id %in% common_seqs) %>%
-    as.data.frame(check.names = F)
-}
-
-# save library size and da var information for future steps
-lib_sizes <- md %>%
-  dplyr::group_by(subject_id, !!sym(DA_VAR)) %>%
-  dplyr::summarize(depth = n())
-
-write_tsv(lib_sizes, 'library_sizes.tsv')
 
 # add the v alleles
 md$v_allele <- getAllele(md$v_call, strip_d = F, omit_nl = F)
@@ -159,7 +182,7 @@ ASCs <- unique(md$asc_group)
 
 # combine ASCs under 1,000 sequences
 message('Combining ASCs with under 1,000 sequences...')
-small_ASCs <- table(md$asc_group)[table(md$asc_group) < 1000] 
+small_ASCs <- table(md$asc_group)[table(md$asc_group) < 1000]
 small_ASCs <- names(small_ASCs)
 
 md[md$asc_group %in% small_ASCs, 'asc_group'] <- 'small-ASC'
@@ -171,30 +194,15 @@ if (length(unique(md$asc_group)) == 1){
 
 ASC_split <- split(md, md$asc_group)
 
-# initialize manifest
-# n_rows <- length(ASC_split)
-# manifest <- data.frame(asc_id = character(n_rows),
-#                        airr = character(n_rows),
-#                        embedding = character(n_rows))
-
-# row.names(manifest) <- names(ASC_split)
-
 for (asc_choice in names(ASC_split)){
-  
-    message(paste0('Saving info for ASC ', asc_choice, '...'))
-    # manifest[asc_choice, 'asc_id'] <- paste0(asc_choice, '_', META_LABEL)
 
-    # if (!dir.exists(file.path('ASCs', asc_choice))){
-    #   dir.create(file.path('ASCs', asc_choice))
-    # }
+    message(paste0('Saving info for ASC ', asc_choice, '...'))
 
     asc_md <- ASC_split[[asc_choice]]
     asc_md$ASC <- asc_choice
-  
+
     write_tsv(asc_md,
              file.path(paste0(asc_choice, '_md.tsv.gz')))
-
-    # manifest[asc_choice, 'airr'] <- file.path(asc_choice, paste0(asc_choice, '_', META_LABEL, '_md.tsv.gz'))
 
     if (USE_EMB){
     emb_filtered <- data %>%
@@ -207,15 +215,9 @@ for (asc_choice in names(ASC_split)){
     write_tsv(data.frame(sequence_id = character()),
                 file.path(paste0(asc_choice, '_emb.tsv.gz')))
   }
-  
-  # include a filename regardless
-  # manifest[asc_choice, 'embedding'] <- file.path(asc_choice, paste0(asc_choice, '_', META_LABEL, '_emb.tsv.gz'))
 
   message(paste0(nrow(ASC_split[[asc_choice]]), ' sequences recorded for ', asc_choice, '.'))
-  
+
 }
 
-# write_csv(manifest, file.path('ASCs', 'manifest.csv'))
-
 message('Finished.')
-

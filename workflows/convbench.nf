@@ -3,7 +3,7 @@
     IMPORT MODULES / SUBWORKFLOWS / FUNCTIONS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
-include { SPLIT_BY_ASC                                            } from '../modules/local/split_by_asc/main'
+include { PREPROCESS                                              } from '../modules/local/preprocess/main'
 include { CDR3_SIMILARITY                                         } from '../modules/local/cdr3_similarity/main'
 include { CDR3_SIMILARITY_ASC                                     } from '../modules/local/cdr3_similarity/main'
 include { CDR3_SIMILARITY as CDR3_SIMILARITY_FIRSTV               } from '../modules/local/cdr3_similarity/main'
@@ -62,20 +62,22 @@ workflow CONVBENCH {
                                      .dump(tag: 'cdr3_similarity_clustering_params')
 
     //
-    // MODULE: Run split_by_ASC
+    // MODULE: Run preprocessing (library sizes for all runs, ASC splitting in asc_mode)
     //
 
     if (params.asc_mode && !params.asc_guide){
         error "When --asc_mode is enabled, you must provide --asc_guide."
     }
 
+    // an empty list skips ASC splitting
+    def asc_guide = params.asc_mode ? channel.value(file(params.asc_guide, checkIfExists: true)) : channel.value([])
+
+    PREPROCESS(ch_samplesheet, asc_guide)
+
     if (params.asc_mode){
 
-        // make channel for guide
-        asc_guide = Channel.value(file(params.asc_guide))
-
-        // make ASC level channel    
-        asc_splitting = SPLIT_BY_ASC(ch_samplesheet, asc_guide)
+        // make ASC level channel
+        asc_splitting = PREPROCESS.out.asc_files.join(PREPROCESS.out.library_sizes)
 
         ch_file_pairs = asc_splitting.flatMap{ meta, md_files, emb_files, library_sizes  ->
             

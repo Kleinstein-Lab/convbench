@@ -2,7 +2,7 @@ FROM continuumio/miniconda3:26.3.2
 LABEL authors="caroline.sullivan@yale.edu"
 LABEL description="Docker image containing all requirements for splitting by ASC"
 
-# Build with command: docker build . -t cfsullivan16/split_by_asc:<ver>
+# Build with command: docker build . -t cfsullivan16/split_by_asc:<ver> (image name kept from the original split_by_asc module)
 
 # Update system packages and install dependencies
 RUN apt-get update \
