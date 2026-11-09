@@ -1,5 +1,5 @@
 process EVALUATE{
-    tag "${meta.id}"
+    tag "${meta.tool_dir}_${meta.id}"
     label 'process_medium'
 
     container "docker.io/cfsullivan16/evaluate:1.0.0"
@@ -18,14 +18,17 @@ process EVALUATE{
 
     script:
     // a single file is staged as a path rather than a list
-    def as_list = { files -> [files].flatten() }
+    def counts_list = [counts].flatten()
+    def memberships_list = [memberships].flatten()
+    def tool_info_list = [tool_info].flatten()
     // milo_objects is empty for tools other than Milo
-    def milo_arg = as_list(milo_objects) ? "-mo ${as_list(milo_objects).join(',')}" : ""
+    def milo_list = [milo_objects].flatten()
+    def milo_arg = milo_list ? "-mo ${milo_list.join(',')}" : ""
     """
     evaluate.R \
-    -c ${as_list(counts).join(',')} \
-    -m ${as_list(memberships).join(',')} \
-    -i ${as_list(tool_info).join(',')} \
+    -c ${counts_list.join(',')} \
+    -m ${memberships_list.join(',')} \
+    -i ${tool_info_list.join(',')} \
     ${milo_arg} \
     -li ${library_sizes} \
     -t ${meta.tool_type} \

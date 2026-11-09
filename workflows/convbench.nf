@@ -5,21 +5,11 @@
 */
 include { PREPROCESS                                              } from '../modules/local/preprocess/main'
 include { CDR3_SIMILARITY                                         } from '../modules/local/cdr3_similarity/main'
-include { CDR3_SIMILARITY_ASC                                     } from '../modules/local/cdr3_similarity/main'
 include { CDR3_SIMILARITY as CDR3_SIMILARITY_FIRSTV               } from '../modules/local/cdr3_similarity/main'
-include { CDR3_SIMILARITY_ASC as CDR3_SIMILARITY_ASC_FIRSTV       } from '../modules/local/cdr3_similarity/main'
 include { MILO                                                    } from '../modules/local/milo/main'
-include { MILO_ASC                                                } from '../modules/local/milo/main'
-include { DASEQ                                                   } from '../modules/local/daseq/main'
-include { DASEQ_ASC                                               } from '../modules/local/daseq/main'
 include { BCRDIST                                                 } from '../modules/local/bcrdist/main'
-include { BCRDIST_ASC                                             } from '../modules/local/bcrdist/main'
+include { EVALUATE                                                } from '../modules/local/evaluate/main'
 include { MULTIQC                                                 } from '../modules/nf-core/multiqc/main'
-include { GET_ASC_AUROC as GET_CDR3_SIMILARITY_ASC_AUROC          } from '../modules/local/get_asc_auroc/main'
-include { GET_ASC_AUROC as GET_CDR3_SIMILARITY_ASC_FIRSTV_AUROC   } from '../modules/local/get_asc_auroc/main'
-include { GET_ASC_AUROC as GET_MILO_ASC_AUROC                     } from '../modules/local/get_asc_auroc/main'
-include { GET_ASC_AUROC as GET_DASEQ_ASC_AUROC                    } from '../modules/local/get_asc_auroc/main'
-include { GET_ASC_AUROC as GET_BCRDIST_ASC_AUROC                  } from '../modules/local/get_asc_auroc/main'
 include { paramsSummaryMap                                        } from 'plugin/nf-schema'
 include { paramsSummaryMultiqc                                    } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { softwareVersionsToYAML                                  } from '../subworkflows/nf-core/utils_nfcore_pipeline'
@@ -74,215 +64,123 @@ workflow CONVBENCH {
 
     PREPROCESS(ch_samplesheet, asc_guide)
 
+    // channel: [ dataset_id, library_sizes ]
+    ch_library_sizes = PREPROCESS.out.library_sizes
+        .map { meta, library_sizes -> [ meta.id, library_sizes ] }
+
+    // tool inputs, one per dataset in standard mode and one per ASC in asc_mode
+    // meta.group_id is the ASC (or 'all') and meta.n_groups the number of groups in the dataset
+    // channel: [ meta, airr, embedding ]
     if (params.asc_mode){
 
-        // make ASC level channel
-        asc_splitting = PREPROCESS.out.asc_files.join(PREPROCESS.out.library_sizes)
+        ch_tool_inputs = PREPROCESS.out.asc_files
+            .flatMap { meta, md_files, emb_files ->
 
-        ch_file_pairs = asc_splitting.flatMap{ meta, md_files, emb_files, library_sizes  ->
-            
-            def meta_id = meta.id
+                def md_list = [md_files].flatten()
+                def emb_list = [emb_files].flatten()
+                def group_ids = md_list.collect { md -> md.name.replaceAll(/_md\.tsv\.gz$/, '') }
 
-            def labeled_md_files = md_files
-                .collect{ it ->
-                    [meta_id, it.name.split('_')[0], library_sizes, it]
+                group_ids.collect { group_id ->
+                    [
+                        meta + [sample_id: meta.id, group_id: group_id, n_groups: group_ids.size()],
+                        md_list.find { md -> md.name == "${group_id}_md.tsv.gz" },
+                        emb_list.find { emb -> emb.name == "${group_id}_emb.tsv.gz" }
+                    ]
                 }
+            }
+    } else{
 
-            def labeled_emb_files = emb_files
-                .collect{ it ->
-                    [meta_id, it.name.split('_')[0], library_sizes, it]
-                }
-            
-            return tuple(
-                labeled_md_files + labeled_emb_files
-            )
-        }
-        .groupTuple(by: [0, 1, 2])
-        .map{ meta_id, asc_id, library_sizes, files -> // ensure files are always in the right order
-        
-            def airr = files.find { it.name.endsWith('_md.tsv.gz') }
-            def embedding = files.find { it.name.endsWith('_emb.tsv.gz')}
-
-            tuple(meta_id, asc_id, airr, embedding, library_sizes)
-        }
+        ch_tool_inputs = ch_samplesheet
+            .map { meta, airr, embedding ->
+                [ meta + [sample_id: meta.id, group_id: 'all', n_groups: 1], airr, embedding ]
+            }
     }
+
+    ch_tool_inputs.dump(tag: 'tool_inputs') // Debug
+
+    // CDR3 similarity inputs, one per group and clustering parameter set
+    ch_cdr3_inputs = ch_tool_inputs
+        .combine(ch_clustering_params)
+        .map { meta, airr, embedding, linkage_method, cluster_threshold ->
+            def fmeta = meta + [
+                id: "${meta.id}_${linkage_method}_t${cluster_threshold}".toString(),
+                linkage: linkage_method,
+                threshold: cluster_threshold
+            ]
+            [ fmeta, airr, embedding ] // channel: [ [meta, airr, embedding] ]
+        }
+        .dump(tag: 'cdr3_input_final')
+
+    def conv_tools = params.conv_tools ? params.conv_tools.split(',').collect { tool -> tool.trim() } : []
+
+    def ch_evaluation_inputs = channel.empty()
 
     //
     // MODULE: Run CDR3_similarity
     //
+    if ('cdr3_similarity' in conv_tools){
+        CDR3_SIMILARITY(ch_cdr3_inputs)
 
-    if (params.conv_tools && params.conv_tools.split(',').contains('cdr3_similarity')){
-
-        if(params.asc_mode){
-
-            ch_clustering_params_inputs_asc = ch_file_pairs
-                .combine(ch_clustering_params)
-                .map { it ->
-                def fmeta = [:]
-                fmeta.id = it[0] + '_' + it[5].toString() + '_t' + it[6].toString()
-                fmeta.asc_id = it[1]
-                fmeta.linkage = it[5]
-                fmeta.threshold = it[6]
-                fmeta.library_sizes = it[4]
-                [fmeta, it[2], it[3]] // channel: [ [meta, airr, embedding] ]
-                }
-                .dump(tag: 'cdr3_input_final_asc')
-
-            cdr3_sim_asc_result = CDR3_SIMILARITY_ASC(ch_clustering_params_inputs_asc)
-
-            def tool_id = 'cdr3_similarity'
-
-            cdr3_sim_asc_input = cdr3_sim_asc_result.auc_input
-                .map{meta_id, seq_file ->
-                    tuple(tool_id, meta_id, seq_file)
-                }
-                .groupTuple(by: [0, 1])
-
-            GET_CDR3_SIMILARITY_ASC_AUROC(cdr3_sim_asc_input)
-        
-        } else{
-
-            ch_clustering_params_inputs = ch_samplesheet
-                .combine(ch_clustering_params)
-                .map { it ->
-                def fmeta = [:]
-                fmeta.id = it[0].id + '_' + it[3].toString() + '_t' + it[4].toString()
-                fmeta.linkage = it[3]
-                fmeta.threshold = it[4]
-                [fmeta, it[1], it[2]] // channel: [ [meta, airr, embedding] ]
-                }
-                .dump(tag: 'cdr3_input_final')
-
-            CDR3_SIMILARITY(
-                ch_clustering_params_inputs
-            )
-        }
+        ch_evaluation_inputs = ch_evaluation_inputs.mix(
+            CDR3_SIMILARITY.out.eval_input.map { row -> labelEvalInput(row, 'cdr3_similarity', 'cluster', 'CDR3 Similarity') }
+        )
     }
 
     //
     // MODULE: Run CDR3_similarity_firstv
     //
-    if (params.conv_tools && params.conv_tools.split(',').contains('cdr3_similarity_firstv')){
-        if(params.asc_mode){
+    if ('cdr3_similarity_firstv' in conv_tools){
+        CDR3_SIMILARITY_FIRSTV(ch_cdr3_inputs)
 
-            ch_clustering_firstv_params_inputs_asc = ch_file_pairs
-                .combine(ch_clustering_params)
-                .map { it ->
-                def fmeta = [:]
-                fmeta.id = it[0] + '_' + it[5].toString() + '_t' + it[6].toString()
-                fmeta.asc_id = it[1]
-                fmeta.linkage = it[5]
-                fmeta.threshold = it[6]
-                fmeta.library_sizes = it[4]
-                [fmeta, it[2], it[3]] // channel: [ [meta, airr, embedding] ]
-                }
-                .dump(tag: 'cdr3_firstv_input_final_asc')
-
-            cdr3_sim_asc_result = CDR3_SIMILARITY_ASC_FIRSTV(ch_clustering_firstv_params_inputs_asc)
-
-            def tool_id = 'cdr3_similarity_firstv'
-
-            cdr3_sim_asc_input = cdr3_sim_asc_result.auc_input
-                .map{meta_id, seq_file ->
-                    tuple(tool_id, meta_id, seq_file)
-                }
-                .groupTuple(by: [0, 1])
-
-            GET_CDR3_SIMILARITY_ASC_FIRSTV_AUROC(cdr3_sim_asc_input)
-        
-        } else{
-
-            ch_clustering_firstv_params_inputs = ch_samplesheet
-                .combine(ch_clustering_params)
-                .map { it ->
-                def fmeta = [:]
-                fmeta.id = it[0].id + '_' + it[3].toString() + '_t' + it[4].toString()
-                fmeta.linkage = it[3]
-                fmeta.threshold = it[4]
-                [fmeta, it[1], it[2]] // channel: [ [meta, airr, embedding] ]
-                }
-                .dump(tag: 'cdr3_firstv_input_final')
-
-            CDR3_SIMILARITY_FIRSTV(
-                ch_clustering_firstv_params_inputs
-            )
-        }
+        ch_evaluation_inputs = ch_evaluation_inputs.mix(
+            CDR3_SIMILARITY_FIRSTV.out.eval_input.map { row -> labelEvalInput(row, 'cdr3_similarity_firstv', 'cluster', 'CDR3 Similarity - First V') }
+        )
     }
-
 
     //
     // MODULE: Run Milo
     //
-    if (params.conv_tools && params.conv_tools.split(',').contains('milo')){
-        if(params.asc_mode){
-            
-            milo_asc_result = MILO_ASC(ch_file_pairs)
+    if ('milo' in conv_tools){
+        MILO(ch_tool_inputs)
 
-            def tool_id = 'Milo'
-
-            milo_asc_input = milo_asc_result.auc_input
-                .map{meta_id, seq_file ->
-                    tuple(tool_id, meta_id, seq_file)
-                }
-                .groupTuple(by: [0, 1])
-
-            GET_MILO_ASC_AUROC(milo_asc_input)
-            
-        } else{
-            MILO(
-                ch_samplesheet
-            )
-        }
-    }
-    //
-    // MODULE: Run DA-seq
-    //
-    if (params.conv_tools && params.conv_tools.split(',').contains('daseq')){
-        if(params.asc_mode){
-
-            daseq_asc_result = DASEQ_ASC(ch_file_pairs)
-
-            def tool_id = 'DA-seq'
-
-            daseq_asc_input = daseq_asc_result.auc_input
-                .map{meta_id, seq_file ->
-                    tuple(tool_id, meta_id, seq_file)
-                }
-                .groupTuple(by: [0, 1])
-
-            GET_DASEQ_ASC_AUROC(daseq_asc_input)
-
-        } else{
-            DASEQ(
-                ch_samplesheet
-            )
-        }
+        ch_evaluation_inputs = ch_evaluation_inputs.mix(
+            MILO.out.eval_input.map { row -> labelEvalInput(row, 'Milo', 'milo', 'Milo') }
+        )
     }
 
     //
     // MODULE: Run BCRdist
     //
-    if (params.conv_tools && params.conv_tools.split(',').contains('bcrdist')){
-        if(params.asc_mode){
+    if ('bcrdist' in conv_tools){
+        BCRDIST(ch_tool_inputs)
 
-            bcrdist_asc_result = BCRDIST_ASC(ch_file_pairs)
-
-            def tool_id = 'BCRdist'
-
-            bcrdist_asc_input = bcrdist_asc_result.auc_input
-                .map{meta_id, seq_file ->
-                    tuple(tool_id, meta_id, seq_file)
-                }
-                .groupTuple(by: [0, 1])
-
-            GET_BCRDIST_ASC_AUROC(bcrdist_asc_input)
-
-        } else{
-            BCRDIST(
-                ch_samplesheet
-            )
-        }
+        ch_evaluation_inputs = ch_evaluation_inputs.mix(
+            BCRDIST.out.eval_input.map { row -> labelEvalInput(row, 'BCRdist', 'cluster', 'BCRdist') }
+        )
     }
+
+    //
+    // MODULE: Run evaluation
+    //
+
+    // gather the outputs from all groups (ASCs) of each tool run, then add the library sizes
+    // channel: [ meta, counts, memberships, tool_info, milo_objects, library_sizes ]
+    ch_evaluate = ch_evaluation_inputs
+        .map { meta, counts, memberships, tool_info, milo_object ->
+            [ groupKey([meta.tool_dir, meta.id], meta.n_groups), meta, counts, memberships, tool_info, milo_object ]
+        }
+        .groupTuple()
+        .map { _key, metas, counts, memberships, tool_info, milo_objects ->
+            def meta = metas[0].findAll { k, _v -> k != 'group_id' }
+            [ meta.sample_id, meta, counts, memberships, tool_info, milo_objects.flatten() ]
+        }
+        .combine(ch_library_sizes, by: 0)
+        .map { _sample_id, meta, counts, memberships, tool_info, milo_objects, library_sizes ->
+            [ meta, counts, memberships, tool_info, milo_objects, library_sizes ]
+        }
+        .dump(tag: 'evaluate_input')
+
+    EVALUATE(ch_evaluate)
 
     //
     // Collate and save software versions
@@ -341,6 +239,23 @@ workflow CONVBENCH {
     )
     emit:multiqc_report = MULTIQC.out.report.map { _meta, report -> [report] }.toList() // channel: /path/to/multiqc_report.html
     versions       = ch_versions                 // channel: [ path(versions.yml) ]
+}
+
+/*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    FUNCTIONS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
+
+//
+// Label a tool's evaluation inputs with the tool information used by EVALUATE
+// row: [ meta, counts, memberships, tool_info, (milo_object) ]
+// Tools other than Milo have no Milo object, so it is replaced with an empty list
+//
+def labelEvalInput(row, tool_dir, tool_type, tool_name) {
+    def meta = row[0] + [tool_dir: tool_dir, tool_type: tool_type, tool_name: tool_name]
+    def milo_object = row.size() > 4 ? row[4] : []
+    return [ meta, row[1], row[2], row[3], milo_object ]
 }
 
 /*
