@@ -1,0 +1,21 @@
+name: evaluate
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  - r-base=4.5.2
+  # R packages needed by scripts in evaluate module
+  - bioconda::bioconductor-milor
+  - bioconda::bioconductor-singlecellexperiment
+  - bioconda::bioconductor-summarizedexperiment
+  - conda-forge::r-ggplot2
+  - conda-forge::r-ggrepel
+  - conda-forge::r-patchwork
+  - conda-forge::r-dplyr
+  - conda-forge::r-tidyr
+  - conda-forge::r-readr
+  - conda-forge::r-matrix
+  - conda-forge::r-pracma
+  - conda-forge::r-argparse
