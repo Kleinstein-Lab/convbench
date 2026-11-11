@@ -6,6 +6,8 @@ channels:
 
 dependencies:
   - r-base=4.5.2
+  - conda-forge::python=3.12
+  - conda-forge::pip
   # R packages needed by scripts in evaluate module
   - bioconda::bioconductor-milor
   - bioconda::bioconductor-singlecellexperiment
@@ -18,3 +20,4 @@ dependencies:
   - conda-forge::r-matrix
   - conda-forge::r-pracma
   - conda-forge::r-argparse
+  - conda-forge::r-reticulate

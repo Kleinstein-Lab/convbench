@@ -2,7 +2,7 @@ process EVALUATE{
     tag "${meta.tool_dir}_${meta.id}"
     label 'process_medium'
 
-    container "docker.io/cfsullivan16/evaluate:1.0.0"
+    container "docker.io/cfsullivan16/evaluate:1.1.0"
 
     input:
     tuple val(meta), path(counts), path(memberships), path(tool_info), path(milo_objects), path(library_sizes)
@@ -36,6 +36,7 @@ process EVALUATE{
     -o . \
     -da ${params.da_variable} \
     -dg ${params.disease_gp} \
+    -cg ${params.control_gp} \
     -a ${params.auc_variable}
 
     """

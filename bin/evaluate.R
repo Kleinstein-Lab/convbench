@@ -10,6 +10,7 @@ suppressPackageStartupMessages({
   library(ggrepel)
   library(Matrix)
   library(pracma)
+  library(reticulate)
 })
 
 # Evaluates the output of a convergence tool. Every tool provides, for each group
@@ -147,6 +148,75 @@ run_wilcox <- function(cluster_freqs, subj_info, da_variable, disease_group){
 
   return(data.frame(cluster_id = row.names(cluster_freqs),
                     p_value = unname(p_vals[freq_keys])))
+}
+
+run_beta_binomial <- function(count_mat, subj_info, da_variable, disease_group, control_group){
+  # run the dejabu beta-binomial test on the cluster x subject count matrix, testing whether
+  # clusters are enriched in disease_group compared to control_group
+  # control_group = level of da_variable used as the reference
+
+  dejabu_counts <- import('dejabu.Counts')
+  dejabu_enrichment <- import('dejabu.Enrichment')
+
+  # pass data frames so the cluster and subject names come through as the pandas index/columns
+  clusters <- dejabu_counts$ClusterCounts(r_to_py(as.data.frame(count_mat)),
+                                          r_to_py(subj_info),
+                                          group_col = da_variable,
+                                          subject_col = 'subject_id')
+
+  contrast <- clusters$contrast(disease_group, control_group)
+  bb_res <- dejabu_enrichment$BetaBinomialTest()$run(contrast)
+
+  res_df <- py_to_r(bb_res$toFrame())
+  res_df$cluster_id <- row.names(res_df)
+
+  return(res_df)
+}
+
+run_beta_binomial <- function(count_mat, subj_info, da_variable, disease_group, control_group){
+  # run the dejabu beta-binomial test on the cluster x subject count matrix, testing whether
+  # clusters are enriched in disease_group compared to control_group
+  # control_group = level of da_variable used as the reference
+
+  dejabu_counts <- import('dejabu.Counts')
+  dejabu_enrichment <- import('dejabu.Enrichment')
+
+  # pass data frames so the cluster and subject names come through as the pandas index/columns
+  clusters <- dejabu_counts$ClusterCounts(r_to_py(as.data.frame(count_mat)),
+                                          r_to_py(subj_info),
+                                          group_col = da_variable,
+                                          subject_col = 'subject_id')
+
+  contrast <- clusters$contrast(disease_group, control_group)
+  bb_res <- dejabu_enrichment$BetaBinomialTest()$run(contrast)
+
+  res_df <- py_to_r(bb_res$toFrame())
+  res_df$cluster_id <- row.names(res_df)
+
+  return(res_df)
+}
+
+run_overdispersed_z <- function(count_mat, subj_info, da_variable, disease_group, control_group){
+  # run the dejabu overdispersed z-test on the cluster x subject count matrix, testing whether
+  # clusters are enriched in disease_group compared to control_group
+  # control_group = level of da_variable used as the reference
+
+  dejabu_counts <- import('dejabu.Counts')
+  dejabu_enrichment <- import('dejabu.Enrichment')
+
+  # pass data frames so the cluster and subject names come through as the pandas index/columns
+  clusters <- dejabu_counts$ClusterCounts(r_to_py(as.data.frame(count_mat)),
+                                          r_to_py(subj_info),
+                                          group_col = da_variable,
+                                          subject_col = 'subject_id')
+
+  contrast <- clusters$contrast(disease_group, control_group)
+  oz_res <- dejabu_enrichment$OverdispersedZTest()$run(contrast)
+
+  res_df <- py_to_r(oz_res$toFrame())
+  res_df$cluster_id <- row.names(res_df)
+
+  return(res_df)
 }
 
 run_milo_glm <- function(milo, cluster_ids, subj_info, da_variable){
@@ -465,6 +535,9 @@ parser$add_argument('-da', '--da_variable', type = 'character', default = 'statu
 parser$add_argument('-dg', '--disease_group', type = 'character', default = 'disease',
                     help = 'Level of the DA variable to test for enrichment.')
 
+parser$add_argument('-cg', '--control_group', type = 'character', default = 'control',
+                    help = 'Level of the DA variable used as the reference for the beta-binomial test.')
+
 parser$add_argument('-a', '--auc_var', type = 'character', default = 'FALSE',
                     help = 'Specify which column should be used for generating AUC curve (i.e. "simulated" or "binder"). Column type should be logical. If no AUC variable, set to FALSE.')
 
@@ -485,7 +558,11 @@ TOOL_NAME <- args$tool_name
 OUTPUT_DIR <- args$output_dir
 DA_VAR <- args$da_variable
 DISEASE_GP <- args$disease_group
+CONTROL_GP <- args$control_group
 ALPHA <- args$alpha
+
+# for reticulate:
+use_python("/opt/conda/envs/evaluate/bin/python", required = TRUE)
 
 AUC_VAR <- args$auc_var
 if (toupper(AUC_VAR) == 'FALSE'){
@@ -527,6 +604,10 @@ row.names(lib_sizes) <- lib_sizes$subject_id
 
 if (!DISEASE_GP %in% lib_sizes[[DA_VAR]]){
   stop(paste0('Disease group ', DISEASE_GP, ' not found in ', DA_VAR, ' column.'))
+}
+
+if (!CONTROL_GP %in% lib_sizes[[DA_VAR]]){
+  stop(paste0('Control group ', CONTROL_GP, ' not found in ', DA_VAR, ' column.'))
 }
 
 print('Library sizes to be used:')
@@ -577,10 +658,14 @@ if (length(TOOL_INFO_LOCS) > 0){
 if (TOOL_TYPE == 'milo'){
   tests <- c('GLM' = TOOL_NAME,
              'Fisher' = paste0(TOOL_NAME, ' + Fisher'),
-             'Wilcoxon' = paste0(TOOL_NAME, ' + One-sided Wilcoxon'))
+             'Wilcoxon' = paste0(TOOL_NAME, ' + One-sided Wilcoxon'),
+             'BetaBinomial' = paste0(TOOL_NAME, ' + Beta Binomial'),
+             'OverdispersedZ' = paste0(TOOL_NAME, ' + Overdispersed Z-Test'))
 } else{
   tests <- c('Fisher' = paste0(TOOL_NAME, ' + Fisher'),
-             'Wilcoxon' = paste0(TOOL_NAME, ' + Wilcoxon'))
+             'Wilcoxon' = paste0(TOOL_NAME, ' + Wilcoxon'),
+             'BetaBinomial' = paste0(TOOL_NAME, ' + Beta Binomial'),
+             'OverdispersedZ' = paste0(TOOL_NAME, ' + Overdispersed Z-Test'))
 }
 
 test_results <- list()
@@ -591,6 +676,12 @@ test_results[['Fisher']] <- run_fisher(count_mat, lib_sizes, DA_VAR, DISEASE_GP)
 message(paste0('Running one-sided Wilcoxon tests for ', DISEASE_GP, ' enrichment...'))
 cluster_freqs <- get_cluster_freqs(count_mat, lib_sizes)
 test_results[['Wilcoxon']] <- run_wilcox(cluster_freqs, lib_sizes, DA_VAR, DISEASE_GP)
+
+message(paste0('Running Beta Binomial tests for ', DISEASE_GP, ' enrichment...'))
+test_results[['BetaBinomial']] <- run_beta_binomial(count_mat, lib_sizes, DA_VAR, DISEASE_GP, CONTROL_GP)
+
+message(paste0('Running Overdispersed z-tests for ', DISEASE_GP, ' enrichment...'))
+test_results[['OverdispersedZ']] <- run_overdispersed_z(count_mat, lib_sizes, DA_VAR, DISEASE_GP, CONTROL_GP)
 
 write.table(data.frame(cluster_id = row.names(cluster_freqs), cluster_freqs, check.names = F),
             file.path(OUTPUT_DIR, 'tables', 'cluster_subject_freqs.tsv'),
@@ -616,13 +707,17 @@ if (TOOL_TYPE == 'milo'){
 
     glm_res_list[[group]] <- run_milo_glm(milo, group_clusters, lib_sizes, DA_VAR)
 
-    # spatial FDR for the Fisher and Wilcoxon tests on this group's graph
+    # spatial FDR for the tests on this group's graph
     fisher_p <- test_results[['Fisher']]$p_value[match(group_clusters, test_results[['Fisher']]$cluster_id)]
     wilcox_p <- test_results[['Wilcoxon']]$p_value[match(group_clusters, test_results[['Wilcoxon']]$cluster_id)]
+    betabinomial_p <- test_results[['BetaBinomial']]$p_value[match(group_clusters, test_results[['BetaBinomial']]$cluster_id)]
+    overdispersedz_p <- test_results[['OverdispersedZ']]$p_value[match(group_clusters, test_results[['OverdispersedZ']]$cluster_id)]
 
     spatial_fdr_list[[group]] <- data.frame(cluster_id = group_clusters,
                                             fisher_spatial_fdr = get_spatial_fdr(milo, fisher_p),
-                                            wilcox_spatial_fdr = get_spatial_fdr(milo, wilcox_p))
+                                            wilcox_spatial_fdr = get_spatial_fdr(milo, wilcox_p),
+                                            betabinomial_spatial_fdr = get_spatial_fdr(milo, betabinomial_p),
+                                            overdispersedz_spatial_fdr = get_spatial_fdr(milo, overdispersedz_p))
 
     milo_objs[[group]] <- milo
   }
@@ -636,6 +731,12 @@ if (TOOL_TYPE == 'milo'){
 
   test_results[['Wilcoxon']] <- test_results[['Wilcoxon']] %>%
     dplyr::left_join(spatial_fdr %>% dplyr::select(cluster_id, spatial_fdr = wilcox_spatial_fdr), by = 'cluster_id')
+
+  test_results[['BetaBinomial']] <- test_results[['BetaBinomial']] %>%
+    dplyr::left_join(spatial_fdr %>% dplyr::select(cluster_id, spatial_fdr = betabinomial_spatial_fdr), by = 'cluster_id')
+  
+  test_results[['OverdispersedZ']] <- test_results[['OverdispersedZ']] %>%
+    dplyr::left_join(spatial_fdr %>% dplyr::select(cluster_id, spatial_fdr = overdispersedz_spatial_fdr), by = 'cluster_id')
 }
 
 # BH correction across ALL clusters, including across groups
