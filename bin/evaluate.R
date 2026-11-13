@@ -173,29 +173,6 @@ run_beta_binomial <- function(count_mat, subj_info, da_variable, disease_group, 
   return(res_df)
 }
 
-run_beta_binomial <- function(count_mat, subj_info, da_variable, disease_group, control_group){
-  # run the dejabu beta-binomial test on the cluster x subject count matrix, testing whether
-  # clusters are enriched in disease_group compared to control_group
-  # control_group = level of da_variable used as the reference
-
-  dejabu_counts <- import('dejabu.Counts')
-  dejabu_enrichment <- import('dejabu.Enrichment')
-
-  # pass data frames so the cluster and subject names come through as the pandas index/columns
-  clusters <- dejabu_counts$ClusterCounts(r_to_py(as.data.frame(count_mat)),
-                                          r_to_py(subj_info),
-                                          group_col = da_variable,
-                                          subject_col = 'subject_id')
-
-  contrast <- clusters$contrast(disease_group, control_group)
-  bb_res <- dejabu_enrichment$BetaBinomialTest()$run(contrast)
-
-  res_df <- py_to_r(bb_res$toFrame())
-  res_df$cluster_id <- row.names(res_df)
-
-  return(res_df)
-}
-
 run_overdispersed_z <- function(count_mat, subj_info, da_variable, disease_group, control_group){
   # run the dejabu overdispersed z-test on the cluster x subject count matrix, testing whether
   # clusters are enriched in disease_group compared to control_group
@@ -214,6 +191,29 @@ run_overdispersed_z <- function(count_mat, subj_info, da_variable, disease_group
   oz_res <- dejabu_enrichment$OverdispersedZTest()$run(contrast)
 
   res_df <- py_to_r(oz_res$toFrame())
+  res_df$cluster_id <- row.names(res_df)
+
+  return(res_df)
+}
+
+run_pluginz <- function(count_mat, subj_info, da_variable, disease_group, control_group){
+  # run the dejabu beta-binomial test on the cluster x subject count matrix, testing whether
+  # clusters are enriched in disease_group compared to control_group
+  # control_group = level of da_variable used as the reference
+
+  dejabu_counts <- import('dejabu.Counts')
+  dejabu_enrichment <- import('dejabu.Enrichment')
+
+  # pass data frames so the cluster and subject names come through as the pandas index/columns
+  clusters <- dejabu_counts$ClusterCounts(r_to_py(as.data.frame(count_mat)),
+                                          r_to_py(subj_info),
+                                          group_col = da_variable,
+                                          subject_col = 'subject_id')
+
+  contrast <- clusters$contrast(disease_group, control_group)
+  pz_res <- dejabu_enrichment$PluginZTest(estimator = 'subject', combination = 'averaged')$run(contrast)
+
+  res_df <- py_to_r(pz_res$toFrame())
   res_df$cluster_id <- row.names(res_df)
 
   return(res_df)
@@ -660,12 +660,14 @@ if (TOOL_TYPE == 'milo'){
              'Fisher' = paste0(TOOL_NAME, ' + Fisher'),
              'Wilcoxon' = paste0(TOOL_NAME, ' + One-sided Wilcoxon'),
              'BetaBinomial' = paste0(TOOL_NAME, ' + Beta Binomial'),
-             'OverdispersedZ' = paste0(TOOL_NAME, ' + Overdispersed Z-Test'))
+             'OverdispersedZ' = paste0(TOOL_NAME, ' + Overdispersed Z-Test'),
+             'PluginZ' = paste0(TOOL_NAME, ' + Plug-in Z-Test'))
 } else{
   tests <- c('Fisher' = paste0(TOOL_NAME, ' + Fisher'),
              'Wilcoxon' = paste0(TOOL_NAME, ' + Wilcoxon'),
              'BetaBinomial' = paste0(TOOL_NAME, ' + Beta Binomial'),
-             'OverdispersedZ' = paste0(TOOL_NAME, ' + Overdispersed Z-Test'))
+             'OverdispersedZ' = paste0(TOOL_NAME, ' + Overdispersed Z-Test'),
+             'PluginZ' = paste0(TOOL_NAME, ' + Plug-in Z-Test'))
 }
 
 test_results <- list()
@@ -682,6 +684,9 @@ test_results[['BetaBinomial']] <- run_beta_binomial(count_mat, lib_sizes, DA_VAR
 
 message(paste0('Running Overdispersed z-tests for ', DISEASE_GP, ' enrichment...'))
 test_results[['OverdispersedZ']] <- run_overdispersed_z(count_mat, lib_sizes, DA_VAR, DISEASE_GP, CONTROL_GP)
+
+message(paste0('Running Plug-in z-tests for ', DISEASE_GP, ' enrichment...'))
+test_results[['PluginZ']] <- run_pluginz(count_mat, lib_sizes, DA_VAR, DISEASE_GP, CONTROL_GP)
 
 write.table(data.frame(cluster_id = row.names(cluster_freqs), cluster_freqs, check.names = F),
             file.path(OUTPUT_DIR, 'tables', 'cluster_subject_freqs.tsv'),
@@ -712,12 +717,14 @@ if (TOOL_TYPE == 'milo'){
     wilcox_p <- test_results[['Wilcoxon']]$p_value[match(group_clusters, test_results[['Wilcoxon']]$cluster_id)]
     betabinomial_p <- test_results[['BetaBinomial']]$p_value[match(group_clusters, test_results[['BetaBinomial']]$cluster_id)]
     overdispersedz_p <- test_results[['OverdispersedZ']]$p_value[match(group_clusters, test_results[['OverdispersedZ']]$cluster_id)]
+    pluginz_p <- test_results[['PluginZ']]$p_value[match(group_clusters, test_results[['PluginZ']]$cluster_id)]
 
     spatial_fdr_list[[group]] <- data.frame(cluster_id = group_clusters,
                                             fisher_spatial_fdr = get_spatial_fdr(milo, fisher_p),
                                             wilcox_spatial_fdr = get_spatial_fdr(milo, wilcox_p),
                                             betabinomial_spatial_fdr = get_spatial_fdr(milo, betabinomial_p),
-                                            overdispersedz_spatial_fdr = get_spatial_fdr(milo, overdispersedz_p))
+                                            overdispersedz_spatial_fdr = get_spatial_fdr(milo, overdispersedz_p),
+                                            pluginz_spatial_fdr = get_spatial_fdr(milo, pluginz_p))
 
     milo_objs[[group]] <- milo
   }
@@ -737,6 +744,9 @@ if (TOOL_TYPE == 'milo'){
   
   test_results[['OverdispersedZ']] <- test_results[['OverdispersedZ']] %>%
     dplyr::left_join(spatial_fdr %>% dplyr::select(cluster_id, spatial_fdr = overdispersedz_spatial_fdr), by = 'cluster_id')
+
+  test_results[['PluginZ']] <- test_results[['PluginZ']] %>%
+    dplyr::left_join(spatial_fdr %>% dplyr::select(cluster_id, spatial_fdr = pluginz_spatial_fdr), by = 'cluster_id')
 }
 
 # BH correction across ALL clusters, including across groups
